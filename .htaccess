@@ -1,0 +1,32 @@
+# Blood Donor Management System - Apache Configuration
+
+# Deny access to sensitive files
+<FilesMatch "\.(sql|json|md|log)$">
+    Require all denied
+</FilesMatch>
+
+# Deny access to config and includes
+<FilesMatch "^(config\.php)$">
+    Require all denied
+</FilesMatch>
+
+# Protect uploads directory
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    
+    # Redirect root to login page
+    RewriteRule ^$ login.php [L]
+</IfModule>
+
+# Disable directory listing
+Options -Indexes
+
+# Set default charset
+AddDefaultCharset UTF-8
+
+# Security headers
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "SAMEORIGIN"
+    Header set X-XSS-Protection "1; mode=block"
+</IfModule>
