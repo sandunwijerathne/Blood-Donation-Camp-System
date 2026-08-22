@@ -29,14 +29,21 @@ if (!$id || !in_array($status, ['Active', 'Inactive'])) {
 
 try {
     $db = getDB();
+
+    // Check existence separately: MySQL reports 0 affected rows when the
+    // new value equals the old one, so rowCount() alone would report a
+    // missing donor for anyone already in the requested status.
+    $stmt = $db->prepare("SELECT id FROM donors WHERE id = ? LIMIT 1");
+    $stmt->execute([$id]);
+
+    if (!$stmt->fetch()) {
+        sendJsonResponse(false, 'Donor not found.');
+    }
+
     $stmt = $db->prepare("UPDATE donors SET status = ? WHERE id = ?");
     $stmt->execute([$status, $id]);
 
-    if ($stmt->rowCount() > 0) {
-        sendJsonResponse(true, "Donor marked as $status.");
-    } else {
-        sendJsonResponse(false, 'Donor not found.');
-    }
+    sendJsonResponse(true, "Donor marked as $status.");
 } catch (PDOException $e) {
     sendJsonResponse(false, APP_DEBUG ? $e->getMessage() : 'Database error.', [], 500);
 }

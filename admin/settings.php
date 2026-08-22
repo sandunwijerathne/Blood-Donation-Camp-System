@@ -140,8 +140,138 @@ $settings = [
     </div>
 </form>
 
+<!-- ── Admin Account ──────────────────────────────────── -->
+<div class="divider my-4"></div>
+
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-user-shield me-2 text-primary"></i> Admin Account
+            </div>
+            <div class="card-body">
+                <?php if (getAdminEmail() === 'admin@admin.com'): ?>
+                    <div class="alert alert-warning py-2 small">
+                        <i class="fas fa-triangle-exclamation me-1"></i>
+                        You are still signed in with the default account that ships with the
+                        installer. Anyone who has seen the setup files knows these credentials.
+                        Change the email and password below.
+                    </div>
+                <?php endif; ?>
+
+                <form id="accountForm" autocomplete="off">
+                    <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Display Name <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" name="account_name" id="accountName"
+                                   value="<?= sanitize(getAdminName()) ?>" required>
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Login Email <span class="text-danger">*</span></label>
+                            <input type="email" class="form-control" name="account_email" id="accountEmail"
+                                   value="<?= sanitize(getAdminEmail()) ?>" required autocomplete="username">
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-12">
+                            <div class="divider"></div>
+                            <p class="text-secondary small mb-3">
+                                Leave the two password boxes empty to keep your current password.
+                            </p>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">New Password</label>
+                            <input type="password" class="form-control" name="new_password" id="newPassword"
+                                   autocomplete="new-password" minlength="10">
+                            <div class="form-text">At least 10 characters.</div>
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Confirm New Password</label>
+                            <input type="password" class="form-control" name="confirm_password" id="confirmPassword"
+                                   autocomplete="new-password">
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Current Password <span class="text-danger">*</span></label>
+                            <input type="password" class="form-control" name="current_password" id="currentPassword"
+                                   required autocomplete="current-password">
+                            <div class="form-text">Required to save any change on this card.</div>
+                            <div class="invalid-feedback"></div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end mt-4">
+                        <button type="submit" class="btn btn-primary" id="btnSaveAccount">
+                            <i class="fas fa-user-check me-1"></i> Update Account
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 $(document).ready(function () {
+
+    // ── Admin account ────────────────────────────────
+    $('#accountForm').on('submit', function (e) {
+        e.preventDefault();
+
+        const $form = $(this);
+        const $btn = $('#btnSaveAccount');
+        const pw = $('#newPassword').val();
+        const confirmPw = $('#confirmPassword').val();
+
+        $form.find('.is-invalid').removeClass('is-invalid');
+
+        // Catch the mismatch here so the password never leaves the browser
+        // just to be rejected.
+        if (pw !== confirmPw) {
+            showValidationErrors($form, { confirm_password: 'The two passwords do not match.' });
+            showToast('The two passwords do not match.', 'error');
+            return;
+        }
+
+        if (pw && pw.length < 10) {
+            showValidationErrors($form, { new_password: 'Use at least 10 characters.' });
+            showToast('New password must be at least 10 characters.', 'error');
+            return;
+        }
+
+        setButtonLoading($btn);
+
+        $.post('<?= BASE_URL ?>/ajax/account-save.php', $form.serialize(), function (res) {
+            setButtonLoading($btn, false);
+
+            if (res.success) {
+                showToast(res.message, 'success');
+                // Never leave typed passwords sitting in the DOM.
+                $('#newPassword, #confirmPassword, #currentPassword').val('');
+
+                if (res.data && res.data.password_changed) {
+                    $('.alert-warning').remove();
+                }
+            } else {
+                showToast(res.message, 'error');
+                if (res.data && res.data.errors) {
+                    showValidationErrors($form, res.data.errors);
+                }
+            }
+        }, 'json').fail(function () {
+            setButtonLoading($btn, false);
+            showToast('Could not update the account. Please try again.', 'error');
+        });
+    });
+
     $('#settingsForm').on('submit', function (e) {
         e.preventDefault();
         const $btn = $('#btnSaveSettings');

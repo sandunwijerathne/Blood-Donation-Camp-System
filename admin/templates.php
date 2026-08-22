@@ -65,6 +65,41 @@ require_once __DIR__ . '/../includes/header.php';
                             <div class="form-text">Supported placeholders: {NAME}, {DATE}, {LOCATION}, {BLOOD_GROUP}, {MESSAGE}</div>
                             <div class="invalid-feedback"></div>
                         </div>
+
+                        <div class="col-12">
+                            <div class="divider"></div>
+                            <div class="alert alert-info py-2 small mb-3">
+                                <i class="fab fa-whatsapp me-1"></i>
+                                <strong>WhatsApp delivery.</strong> To message donors who have not written to you
+                                in the last 24 hours, WhatsApp requires a template approved in
+                                <em>WhatsApp Manager &rarr; Message Templates</em>. Enter its details below so
+                                this template can be sent. Leave blank to use this template for SMS only.
+                            </div>
+                        </div>
+
+                        <div class="col-md-5">
+                            <label class="form-label">WhatsApp Template Name</label>
+                            <input type="text" class="form-control" name="whatsapp_template_name"
+                                   id="whatsappTemplateName" placeholder="blood_camp_notification">
+                            <div class="form-text">Exactly as approved by Meta (lowercase, underscores).</div>
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label">Language Code</label>
+                            <input type="text" class="form-control" name="whatsapp_language"
+                                   id="whatsappLanguage" placeholder="en" value="en">
+                            <div class="form-text">e.g. en, en_US, si</div>
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label">Variable Order</label>
+                            <input type="text" class="form-control" name="whatsapp_variables"
+                                   id="whatsappVariables" placeholder="NAME,DATE,LOCATION">
+                            <div class="form-text">Feeds Meta's &#123;&#123;1&#125;&#125;, &#123;&#123;2&#125;&#125;, &#123;&#123;3&#125;&#125; in order.</div>
+                            <div class="invalid-feedback"></div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -132,6 +167,9 @@ $(document).ready(function () {
         $('#templateName').val(row.template_name);
         $('#templateType').val(row.template_type);
         $('#templateBody').val(row.template_body);
+        $('#whatsappTemplateName').val(row.whatsapp_template_name || '');
+        $('#whatsappLanguage').val(row.whatsapp_language || 'en');
+        $('#whatsappVariables').val(row.whatsapp_variables || '');
         $('#templateModalTitle').html('<i class="fas fa-file-alt me-2 text-primary"></i> Edit Template');
         new bootstrap.Modal(document.getElementById('templateModal')).show();
     });

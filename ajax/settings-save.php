@@ -37,11 +37,20 @@ function testWhatsAppMessage(string $phone, string $message): array
     }
 
     $url = "https://graph.facebook.com/$version/$phoneNumberId/messages";
+
+    // Use the "hello_world" template that Meta pre-approves on every new
+    // account. A plain text message would only arrive if the tester had
+    // messaged this number in the last 24 hours, so it is a poor smoke
+    // test - a template proves the token, phone number ID and version
+    // are all correct on their own.
     $payload = [
         'messaging_product' => 'whatsapp',
-        'to' => ltrim($phone, '+'),
-        'type' => 'text',
-        'text' => ['preview_url' => false, 'body' => $message]
+        'to'                => ltrim($phone, '+'),
+        'type'              => 'template',
+        'template'          => [
+            'name'     => 'hello_world',
+            'language' => ['code' => 'en_US']
+        ]
     ];
 
     $ch = curl_init($url);
@@ -61,10 +70,20 @@ function testWhatsAppMessage(string $phone, string $message): array
     curl_close($ch);
 
     if ($response === false || $httpCode >= 400) {
-        return ['success' => false, 'message' => 'WhatsApp test failed: ' . ($error ?: (string) $response)];
+        $detail = $error ?: (string) $response;
+
+        if (stripos($detail, 'not exist') !== false && stripos($detail, 'template') !== false) {
+            $detail .= ' - the "hello_world" template was not found. Check the Phone Number ID belongs to this WhatsApp Business Account.';
+        } elseif ($httpCode === 401 || stripos($detail, 'access token') !== false) {
+            $detail .= ' - the access token is invalid or has expired. Temporary tokens last 24 hours.';
+        } elseif (stripos($detail, 'recipient') !== false) {
+            $detail .= ' - add this number to the allowed recipient list on the WhatsApp > API Setup page first.';
+        }
+
+        return ['success' => false, 'message' => 'WhatsApp test failed: ' . $detail];
     }
 
-    return ['success' => true, 'message' => 'WhatsApp test message sent.'];
+    return ['success' => true, 'message' => 'WhatsApp test message sent (hello_world template).'];
 }
 
 function testSmsMessage(string $phone, string $message): array

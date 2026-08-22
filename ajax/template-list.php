@@ -18,7 +18,7 @@ if (!isLoggedIn()) {
 $db = getDB();
 
 if (!isset($_POST['draw'])) {
-    $stmt = $db->query("SELECT id, template_name, template_body, template_type, created_at FROM message_templates ORDER BY template_name");
+    $stmt = $db->query("SELECT id, template_name, template_body, template_type, whatsapp_template_name, whatsapp_language, whatsapp_variables, created_at FROM message_templates ORDER BY template_name");
     sendJsonResponse(true, 'Templates loaded.', ['templates' => $stmt->fetchAll()]);
 }
 
@@ -50,7 +50,7 @@ $stmt = $db->prepare("SELECT COUNT(*) FROM message_templates $whereClause");
 $stmt->execute($params);
 $filteredRecords = (int) $stmt->fetchColumn();
 
-$stmt = $db->prepare("SELECT id, template_name, template_body, template_type, created_at
+$stmt = $db->prepare("SELECT id, template_name, template_body, template_type, whatsapp_template_name, whatsapp_language, whatsapp_variables, created_at
                       FROM message_templates
                       $whereClause
                       ORDER BY $orderColumn $orderDir
