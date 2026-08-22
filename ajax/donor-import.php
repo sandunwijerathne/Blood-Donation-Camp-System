@@ -64,6 +64,7 @@ try {
     $imported = 0;
     $skipped = 0;
     $failed = 0;
+    $encodingErrors = 0;
     $isFirstRow = true;
 
     foreach ($rows as $row) {
@@ -91,6 +92,17 @@ try {
         // Validate required fields
         if (empty($donorName) || empty($mobile)) {
             $failed++;
+            continue;
+        }
+
+        // Reject text that arrived as literal "?" characters. That happens
+        // when a CSV is re-saved by a spreadsheet program in the Windows
+        // ANSI codepage, which cannot represent Sinhala - every character
+        // is replaced by "?" before the file is even uploaded. Storing it
+        // would silently destroy the name, so refuse the row instead.
+        if (preg_match('/^[\?\s\.\-\/]+$/u', $donorName)) {
+            $failed++;
+            $encodingErrors++;
             continue;
         }
 
@@ -158,10 +170,18 @@ try {
     // Clean up uploaded file
     @unlink($filepath);
 
-    sendJsonResponse(true, "Import complete: $imported imported, $skipped skipped, $failed failed.", [
+    $message = "Import complete: $imported imported, $skipped skipped, $failed failed.";
+
+    if ($encodingErrors > 0) {
+        $message .= " $encodingErrors row(s) had names saved as \"?\" - the file was saved in the wrong"
+                  . " character set. Re-save it as \"CSV UTF-8\" and import again.";
+    }
+
+    sendJsonResponse(true, $message, [
         'imported' => $imported,
         'skipped' => $skipped,
-        'failed' => $failed
+        'failed' => $failed,
+        'encoding_errors' => $encodingErrors
     ]);
 
 } catch (\Exception $e) {
