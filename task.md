@@ -257,7 +257,6 @@ can spend.
       delete and validation path, the summary arithmetic, the filtered
       lists, and the exported workbook read back sheet by sheet. Test
       rows were removed afterwards - the tables ship empty.
-
 ## Phase 22: Bug Fixes (round 4)
 - [x] **Every positive blood group rendered invisible.** The badge rules
       were written as `.badge-blood.A\+, .badge-blood[data-blood="A+"]`.

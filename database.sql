@@ -197,9 +197,28 @@ ALTER TABLE `camp_registrations` ADD INDEX `idx_reg_mobile` (`mobile`);
 -- SEED DATA
 -- ============================================================
 
--- Default admin: admin@admin.com / password123
+-- Default admin account.
+--
+-- The password below is a LOCKED placeholder, not a usable bcrypt hash:
+-- password_verify() returns false for it, so a fresh install ships with no
+-- working login. This is deliberate. Earlier versions seeded a real hash of
+-- a weak password and documented it in this file, which meant every install
+-- that forgot to change it had a publicly known admin account - on a system
+-- holding donor names, phone numbers and blood groups.
+--
+-- Set a password before first login. Run this from the project root and type
+-- the password when it waits for input (reading from stdin keeps it out of
+-- your shell history):
+--
+--   php -r "echo password_hash(trim(fgets(STDIN)), PASSWORD_DEFAULT), PHP_EOL;"
+--
+-- Then apply the hash it prints:
+--
+--   UPDATE admins SET password = '<paste-the-hash>' WHERE email = 'admin@admin.com';
+--
+-- After signing in, set your own email and password on Settings > Admin Account.
 INSERT INTO `admins` (`name`, `email`, `password`) VALUES
-('Administrator', 'admin@admin.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi');
+('Administrator', 'admin@admin.com', '!LOCKED-SET-PASSWORD-BEFORE-USE');
 
 -- Default message templates
 INSERT INTO `message_templates` (`template_name`, `template_body`, `template_type`, `whatsapp_template_name`, `whatsapp_language`, `whatsapp_variables`) VALUES

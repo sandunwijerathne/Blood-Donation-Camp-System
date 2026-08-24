@@ -46,7 +46,20 @@ define('APP_VERSION', '1.0.0');
 // Auto-detect base URL
 $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
 $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-define('BASE_URL', $protocol . '://' . $host . '/blood-donor-system');
+// Derive the subdirectory the app is served from, so the same config
+// works at /blood-donor-system, /GITHUB/Blood-Donation-Camp-System, or
+// a domain root. Falls back to '' (domain root) when DOCUMENT_ROOT is
+// unavailable, e.g. under CLI.
+$docRoot = rtrim(str_replace(DIRECTORY_SEPARATOR, '/', $_SERVER['DOCUMENT_ROOT'] ?? ''), '/');
+$appDir  = str_replace(DIRECTORY_SEPARATOR, '/', __DIR__);
+
+// Windows reports drive letters inconsistently, so match case-insensitively
+// but slice from the original to preserve the real path casing in the URL.
+$basePath = ($docRoot !== '' && stripos($appDir, $docRoot) === 0)
+    ? rtrim(substr($appDir, strlen($docRoot)), '/')
+    : '';
+
+define('BASE_URL', $protocol . '://' . $host . $basePath);
 
 // ── Paths ────────────────────────────────────────────────────
 define('ROOT_PATH', __DIR__);
