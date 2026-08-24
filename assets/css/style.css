@@ -431,16 +431,27 @@ body {
     font-weight: 700;
     color: #fff;
     min-width: 42px;
+    /* Fallback background. The text is white, so without this a badge
+       whose group has no rule below renders white-on-white. */
+    background: #94a3b8;
 }
 
-.badge-blood.A\\+, .badge-blood[data-blood="A+"]  { background: var(--blood-a-pos); }
-.badge-blood.A\\-, .badge-blood[data-blood="A-"]  { background: var(--blood-a-neg); }
-.badge-blood.B\\+, .badge-blood[data-blood="B+"]  { background: var(--blood-b-pos); }
-.badge-blood.B\\-, .badge-blood[data-blood="B-"]  { background: var(--blood-b-neg); }
-.badge-blood.AB\\+, .badge-blood[data-blood="AB+"] { background: var(--blood-ab-pos); }
-.badge-blood.AB\\-, .badge-blood[data-blood="AB-"] { background: var(--blood-ab-neg); }
-.badge-blood.O\\+, .badge-blood[data-blood="O+"]  { background: var(--blood-o-pos); }
-.badge-blood.O\\-, .badge-blood[data-blood="O-"]  { background: var(--blood-o-neg); }
+/* Badges are tagged with a data-blood attribute, never a class.
+   These rules used to carry a ".badge-blood.A\+" class selector too,
+   which silently broke the positive groups: "+" is read as the
+   adjacent-sibling combinator, so that half was an invalid selector,
+   and one invalid selector in a comma-separated list voids the whole
+   rule. A+, B+, AB+ and O+ therefore had no background at all and
+   rendered as white text on a white table, while the negative groups
+   (escaped "-" is a legal class character) were unaffected. */
+.badge-blood[data-blood="A+"]  { background: var(--blood-a-pos); }
+.badge-blood[data-blood="A-"]  { background: var(--blood-a-neg); }
+.badge-blood[data-blood="B+"]  { background: var(--blood-b-pos); }
+.badge-blood[data-blood="B-"]  { background: var(--blood-b-neg); }
+.badge-blood[data-blood="AB+"] { background: var(--blood-ab-pos); }
+.badge-blood[data-blood="AB-"] { background: var(--blood-ab-neg); }
+.badge-blood[data-blood="O+"]  { background: var(--blood-o-pos); }
+.badge-blood[data-blood="O-"]  { background: var(--blood-o-neg); }
 
 /* ═══════════════════════════════════════════════════════════
    STATUS BADGES

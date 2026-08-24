@@ -267,7 +267,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 return `<tr>
                     <td>${escapeHtml(donor.donor_name)}</td>
                     <td>${escapeHtml(donor.mobile)}</td>
-                    <td><span class="badge-blood" data-blood="${escapeHtml(donor.blood_group)}">${escapeHtml(donor.blood_group)}</span></td>
+                    <td>${donor.blood_group
+                        ? `<span class="badge-blood" data-blood="${escapeHtml(donor.blood_group)}">${escapeHtml(donor.blood_group)}</span>`
+                        : '<span class="text-secondary">&mdash;</span>'}</td>
                     <td>${escapeHtml(donor.last_donation_date || 'Never')}</td>
                 </tr>`;
             }).join('')

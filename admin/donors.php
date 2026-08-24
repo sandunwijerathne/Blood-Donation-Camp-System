@@ -155,6 +155,10 @@ $(document).ready(function () {
             {
                 data: 'blood_group',
                 render: function (data) {
+                    // Around 10 donors were transcribed from the register
+                    // book with no blood group. Show the same dash the
+                    // other columns use rather than an empty badge.
+                    if (!data) return '<span class="text-secondary">—</span>';
                     return '<span class="badge-blood" data-blood="' + data + '">' + data + '</span>';
                 }
             },

@@ -22,30 +22,38 @@ $endTime = trim($_POST['end_time'] ?? '');
 $location = trim($_POST['location'] ?? '');
 $description = trim($_POST['description'] ?? '');
 $status = trim($_POST['status'] ?? 'Upcoming');
+$budget = trim($_POST['budget_amount'] ?? '');
 
 if (empty($title)) sendJsonResponse(false, 'Title is required.');
 if (empty($campDate)) sendJsonResponse(false, 'Camp date is required.');
 if (empty($location)) sendJsonResponse(false, 'Location is required.');
 if (!in_array($status, ['Upcoming', 'Completed', 'Cancelled'])) $status = 'Upcoming';
 
+// A blank budget box means "no budget planned yet" rather than zero,
+// so the Budget & Donations page can tell the two apart.
+if ($budget !== '' && (!is_numeric($budget) || (float) $budget < 0)) {
+    sendJsonResponse(false, 'Budget must be a number, or left blank.');
+}
+
 $startTime = !empty($startTime) ? $startTime : null;
 $endTime = !empty($endTime) ? $endTime : null;
 $description = !empty($description) ? $description : null;
+$budget = $budget !== '' ? (float) $budget : null;
 
 try {
     $db = getDB();
 
     if ($id > 0) {
         $stmt = $db->prepare(
-            "UPDATE blood_camps SET title=?, camp_date=?, start_time=?, end_time=?, location=?, description=?, status=? WHERE id=?"
+            "UPDATE blood_camps SET title=?, camp_date=?, start_time=?, end_time=?, location=?, description=?, budget_amount=?, status=? WHERE id=?"
         );
-        $stmt->execute([$title, $campDate, $startTime, $endTime, $location, $description, $status, $id]);
+        $stmt->execute([$title, $campDate, $startTime, $endTime, $location, $description, $budget, $status, $id]);
         sendJsonResponse(true, 'Camp updated successfully.');
     } else {
         $stmt = $db->prepare(
-            "INSERT INTO blood_camps (title, camp_date, start_time, end_time, location, description, status) VALUES (?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO blood_camps (title, camp_date, start_time, end_time, location, description, budget_amount, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
         );
-        $stmt->execute([$title, $campDate, $startTime, $endTime, $location, $description, $status]);
+        $stmt->execute([$title, $campDate, $startTime, $endTime, $location, $description, $budget, $status]);
         sendJsonResponse(true, 'Camp created successfully.', ['id' => $db->lastInsertId()]);
     }
 } catch (PDOException $e) {

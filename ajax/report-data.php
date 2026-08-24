@@ -109,7 +109,15 @@ try {
     foreach (['A+','A-','B+','B-','AB+','AB-','O+','O-'] as $group) {
         $bloodGroups[$group] = ['blood_group' => $group, 'total' => 0];
     }
+    // Donors whose blood group was never recorded group under '' here.
+    // Keep the chart to the eight real groups instead of rendering a
+    // nameless slice, and report the unknowns separately.
+    $unknownBloodGroup = 0;
     foreach ($bloodRows as $row) {
+        if (!isset($bloodGroups[$row['blood_group']])) {
+            $unknownBloodGroup += (int) $row['total'];
+            continue;
+        }
         $bloodGroups[$row['blood_group']] = [
             'blood_group' => $row['blood_group'],
             'total' => (int) $row['total']
@@ -149,7 +157,8 @@ try {
             'total_donors' => $totalDonors,
             'eligible_donors' => count($eligibleDonors),
             'messages_sent' => $messagesSent,
-            'upcoming_camps' => $upcomingCamps
+            'upcoming_camps' => $upcomingCamps,
+            'unknown_blood_group' => $unknownBloodGroup
         ],
         'blood_groups' => array_values($bloodGroups),
         'message_trend' => $messageTrend,

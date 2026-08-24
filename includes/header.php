@@ -109,6 +109,10 @@ $appName = getSetting('app_name', APP_NAME);
                 <i class="fas fa-clipboard-list"></i>
                 <span>Camp Register</span>
             </a>
+            <a href="<?= BASE_URL ?>/admin/camp-finance.php" class="nav-link <?= $currentPage === 'camp-finance' ? 'active' : '' ?>">
+                <i class="fas fa-hand-holding-heart"></i>
+                <span>Budget &amp; Donations</span>
+            </a>
         </div>
 
         <div class="nav-section">
