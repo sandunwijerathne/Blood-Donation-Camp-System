@@ -38,11 +38,12 @@ function testWhatsAppMessage(string $phone, string $message, string $templateNam
 
     $url = "https://graph.facebook.com/$version/$phoneNumberId/messages";
 
-    // Send a template rather than plain text: free text only arrives if
-    // the tester messaged this number in the last 24 hours, so it proves
-    // nothing. "hello_world" works on Meta's public test numbers; once a
-    // business registers its own number it must use its own approved
-    // template instead (Meta rejects hello_world with error 131058).
+    // Use the "hello_world" template that Meta pre-approves on new accounts.
+    // A plain text message only arrives if the tester messaged this number in the
+    // last 24 hours, so a template proves the token, Phone Number ID and API
+    // version are all correct by themselves. Once a business registers its own
+    // number Meta rejects "hello_world" (error 131058); businesses must use their
+    // own approved templates.
     $payload = [
         'messaging_product' => 'whatsapp',
         'to'                => ltrim($phone, '+'),
@@ -81,7 +82,8 @@ function testWhatsAppMessage(string $phone, string $message, string $templateNam
                     . ' only happens after authentication succeeds.';
         } elseif (stripos($detail, 'not exist') !== false && stripos($detail, 'template') !== false) {
             $detail .= ' - no approved template with that name and language. Check WhatsApp Manager'
-                     . ' -> Message Templates, and that the language code matches exactly.';
+                     . ' -> Message Templates, and that the language code matches exactly.'
+                     . ' Also confirm the Phone Number ID belongs to this WhatsApp Business Account.';
         } elseif (stripos($detail, 'payment') !== false || stripos($detail, '131042') !== false) {
             $detail .= ' - add a payment method to the WhatsApp Business Account. Business-initiated'
                      . ' messages cannot be sent without one.';
