@@ -104,6 +104,12 @@ CREATE TABLE IF NOT EXISTS `message_templates` (
     `template_name` VARCHAR(255) NOT NULL,
     `template_body` TEXT NOT NULL,
     `template_type` ENUM('Camp Notification','Emergency Request','General') DEFAULT 'General',
+    -- WhatsApp requires a pre-approved template for any message sent
+    -- outside the 24-hour customer service window. These columns tie a
+    -- local template to the one approved in WhatsApp Manager.
+    `whatsapp_template_name` VARCHAR(255) DEFAULT NULL,
+    `whatsapp_language` VARCHAR(10) NOT NULL DEFAULT 'en',
+    `whatsapp_variables` VARCHAR(255) DEFAULT NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -140,10 +146,10 @@ INSERT INTO `admins` (`name`, `email`, `password`) VALUES
 ('Administrator', 'admin@admin.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi');
 
 -- Default message templates
-INSERT INTO `message_templates` (`template_name`, `template_body`, `template_type`) VALUES
-('Blood Camp Notification', 'Hello {NAME},\n\nOur upcoming blood donation camp will be held on:\n\nDate: {DATE}\nLocation: {LOCATION}\n\nWe would be grateful for your participation.\n\nThank you.', 'Camp Notification'),
-('Emergency Blood Request', 'Urgent Blood Request\n\nBlood Group: {BLOOD_GROUP}\nLocation: {LOCATION}\n\nPlease contact us immediately if you can donate.\n\nThank you.', 'Emergency Request'),
-('General Announcement', 'Hello {NAME},\n\n{MESSAGE}\n\nThank you.', 'General');
+INSERT INTO `message_templates` (`template_name`, `template_body`, `template_type`, `whatsapp_template_name`, `whatsapp_language`, `whatsapp_variables`) VALUES
+('Blood Camp Notification', 'Hello {NAME},\n\nOur upcoming blood donation camp will be held on:\n\nDate: {DATE}\nLocation: {LOCATION}\n\nWe would be grateful for your participation.\n\nThank you.', 'Camp Notification', 'blood_camp_notification', 'en', 'NAME,DATE,LOCATION'),
+('Emergency Blood Request', 'Urgent Blood Request\n\nBlood Group: {BLOOD_GROUP}\nLocation: {LOCATION}\n\nPlease contact us immediately if you can donate.\n\nThank you.', 'Emergency Request', 'emergency_blood_request', 'en', 'BLOOD_GROUP,LOCATION'),
+('General Announcement', 'Hello {NAME},\n\n{MESSAGE}\n\nThank you.', 'General', 'general_announcement', 'en', 'NAME,MESSAGE');
 
 -- Default settings
 INSERT INTO `settings` (`setting_key`, `setting_value`) VALUES

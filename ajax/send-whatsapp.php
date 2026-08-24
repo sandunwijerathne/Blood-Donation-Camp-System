@@ -56,7 +56,59 @@ function messagingDonorQuery(string $recipientType, string $bloodGroup, array $d
     return $stmt->fetchAll();
 }
 
-function sendWhatsAppText(string $phone, string $message): array
+/**
+ * Build the Meta payload for a pre-approved template message.
+ *
+ * WhatsApp templates use numbered variables ({{1}}, {{2}}...). This app
+ * writes messages with named placeholders, so $variableOrder says which
+ * placeholder feeds which position - e.g. "NAME,DATE,LOCATION" means
+ * {{1}}=NAME, {{2}}=DATE, {{3}}=LOCATION.
+ */
+function buildTemplatePayload(
+    string $phone,
+    string $templateName,
+    string $language,
+    string $variableOrder,
+    array $values
+): array {
+    $components = [];
+    $order = array_values(array_filter(array_map('trim', explode(',', $variableOrder))));
+
+    if ($order) {
+        $parameters = [];
+        foreach ($order as $key) {
+            // Meta rejects empty parameters, so never send a blank one.
+            $value = trim((string) ($values[strtolower($key)] ?? ''));
+            $parameters[] = ['type' => 'text', 'text' => $value !== '' ? $value : '-'];
+        }
+        $components[] = ['type' => 'body', 'parameters' => $parameters];
+    }
+
+    $template = [
+        'name'     => $templateName,
+        'language' => ['code' => $language !== '' ? $language : 'en'],
+    ];
+
+    if ($components) {
+        $template['components'] = $components;
+    }
+
+    return [
+        'messaging_product' => 'whatsapp',
+        'to'                => ltrim($phone, '+'),
+        'type'              => 'template',
+        'template'          => $template,
+    ];
+}
+
+/**
+ * Send one WhatsApp message.
+ *
+ * $payload is either a template payload (business-initiated, works any
+ * time) or a plain text payload (only delivered inside the 24-hour
+ * window opened by the donor messaging first).
+ */
+function sendWhatsAppPayload(array $payload): array
 {
     $token = getSetting('whatsapp_api_token');
     $phoneNumberId = getSetting('whatsapp_phone_number_id');
@@ -71,12 +123,6 @@ function sendWhatsAppText(string $phone, string $message): array
     }
 
     $url = "https://graph.facebook.com/$version/$phoneNumberId/messages";
-    $payload = [
-        'messaging_product' => 'whatsapp',
-        'to' => ltrim($phone, '+'),
-        'type' => 'text',
-        'text' => ['preview_url' => false, 'body' => $message]
-    ];
 
     $ch = curl_init($url);
     curl_setopt_array($ch, [
@@ -107,13 +153,49 @@ $donorIds = $_POST['donor_ids'] ?? [];
 if (!is_array($donorIds)) {
     $donorIds = explode(',', (string) $donorIds);
 }
-$message = trim($_POST['message'] ?? '');
+$message  = trim($_POST['message'] ?? '');
 
-if ($message === '') {
+// 'template' is business-initiated and works at any time.
+// 'text' only reaches donors who messaged us in the last 24 hours.
+$sendMode   = trim($_POST['send_mode'] ?? 'template');
+$templateId = (int) ($_POST['template_id'] ?? 0);
+
+if ($sendMode !== 'text') {
+    $sendMode = 'template';
+}
+
+if ($sendMode === 'text' && $message === '') {
     sendJsonResponse(false, 'Message is required.');
 }
 
 try {
+    $db = getDB();
+    $template = null;
+
+    if ($sendMode === 'template') {
+        if ($templateId <= 0) {
+            sendJsonResponse(false, 'Choose a template. WhatsApp only delivers business-initiated messages from a template Meta has approved.');
+        }
+
+        $stmt = $db->prepare(
+            "SELECT template_name, template_body, whatsapp_template_name, whatsapp_language, whatsapp_variables
+             FROM message_templates WHERE id = ? LIMIT 1"
+        );
+        $stmt->execute([$templateId]);
+        $template = $stmt->fetch();
+
+        if (!$template) {
+            sendJsonResponse(false, 'That template no longer exists.');
+        }
+
+        if (trim((string) $template['whatsapp_template_name']) === '') {
+            sendJsonResponse(false, sprintf(
+                'Template "%s" has no WhatsApp template name set. Add the name exactly as approved in WhatsApp Manager, on the Templates page.',
+                $template['template_name']
+            ));
+        }
+    }
+
     $donors = messagingDonorQuery($recipientType, $bloodGroup, $donorIds);
     if (!$donors) {
         sendJsonResponse(false, 'No matching active donors found.');
@@ -122,19 +204,43 @@ try {
     $sent = 0;
     $pending = 0;
     $failed = 0;
+    $firstError = '';
 
     foreach ($donors as $donor) {
         $mobile = $donor['whatsapp'] ?: $donor['mobile'];
-        $phone = formatPhoneForAPI($mobile);
-        $body = replacePlaceholders($message, [
-            'name' => $donor['donor_name'],
+        $phone  = formatPhoneForAPI($mobile);
+
+        $values = [
+            'name'        => $donor['donor_name'],
             'blood_group' => $donor['blood_group'],
-            'date' => $_POST['date'] ?? '',
-            'location' => $_POST['location'] ?? '',
-            'message' => $_POST['custom_message'] ?? ''
-        ]);
-        $result = sendWhatsAppText($phone, $body);
-        logMessage((int) $donor['id'], 'WhatsApp', $phone, $body, $result['status'], $result['response']);
+            'date'        => $_POST['date'] ?? '',
+            'location'    => $_POST['location'] ?? '',
+            'message'     => $_POST['custom_message'] ?? ''
+        ];
+
+        if ($sendMode === 'template') {
+            $payload = buildTemplatePayload(
+                $phone,
+                $template['whatsapp_template_name'],
+                (string) $template['whatsapp_language'],
+                (string) $template['whatsapp_variables'],
+                $values
+            );
+            // Log the readable version, not the raw API payload.
+            $logBody = replacePlaceholders($template['template_body'], $values);
+        } else {
+            $body = replacePlaceholders($message, $values);
+            $payload = [
+                'messaging_product' => 'whatsapp',
+                'to'                => ltrim($phone, '+'),
+                'type'              => 'text',
+                'text'              => ['preview_url' => false, 'body' => $body]
+            ];
+            $logBody = $body;
+        }
+
+        $result = sendWhatsAppPayload($payload);
+        logMessage((int) $donor['id'], 'WhatsApp', $phone, $logBody, $result['status'], $result['response']);
 
         if ($result['status'] === 'Sent') {
             $sent++;
@@ -142,13 +248,30 @@ try {
             $pending++;
         } else {
             $failed++;
+            if ($firstError === '') {
+                $firstError = (string) $result['response'];
+            }
         }
     }
 
-    sendJsonResponse(true, "WhatsApp processing complete: $sent sent, $pending pending, $failed failed.", [
-        'sent' => $sent,
-        'pending' => $pending,
-        'failed' => $failed
+    $summary = "WhatsApp processing complete: $sent sent, $pending pending, $failed failed.";
+
+    // Surface the most common setup mistakes instead of a bare count.
+    if ($failed > 0 && $firstError !== '') {
+        if (stripos($firstError, 'template') !== false && stripos($firstError, 'not exist') !== false) {
+            $summary .= ' The template name or language does not match an approved template in WhatsApp Manager.';
+        } elseif (stripos($firstError, '24') !== false || stripos($firstError, 're-engagement') !== false) {
+            $summary .= ' These donors have not messaged you in the last 24 hours, so free text cannot be delivered - use a template.';
+        } elseif (APP_DEBUG) {
+            $summary .= ' First error: ' . mb_substr($firstError, 0, 300);
+        }
+    }
+
+    sendJsonResponse(true, $summary, [
+        'sent'      => $sent,
+        'pending'   => $pending,
+        'failed'    => $failed,
+        'send_mode' => $sendMode
     ]);
 } catch (PDOException $e) {
     sendJsonResponse(false, APP_DEBUG ? $e->getMessage() : 'Database error. Please try again.', [], 500);

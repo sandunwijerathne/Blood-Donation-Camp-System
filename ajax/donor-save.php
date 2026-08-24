@@ -42,10 +42,28 @@ if (empty($donorName)) {
     $errors['donor_name'] = 'Name is required.';
 }
 
+// The T.P. number is this system's unique identifier for a person, so it
+// must be stored in one canonical shape. Without this, "077 821 1176"
+// entered here would never match the "0778211176" the camp register
+// looks up, and the same donor would be created twice.
 if (empty($mobile)) {
     $errors['mobile'] = 'Mobile number is required.';
-} elseif (!preg_match('/^[0-9+\-\s]{7,20}$/', $mobile)) {
-    $errors['mobile'] = 'Invalid mobile number format.';
+} else {
+    $normalized = normalizeMobile($mobile);
+    if ($normalized === '') {
+        $errors['mobile'] = 'Enter a valid 10-digit number, e.g. 0771234567.';
+    } else {
+        $mobile = $normalized;
+    }
+}
+
+if ($whatsapp !== '') {
+    $normalizedWa = normalizeMobile($whatsapp);
+    if ($normalizedWa === '') {
+        $errors['whatsapp'] = 'Enter a valid 10-digit number, e.g. 0771234567.';
+    } else {
+        $whatsapp = $normalizedWa;
+    }
 }
 
 if (!empty($email) && !filter_var($email, FILTER_VALIDATE_EMAIL)) {

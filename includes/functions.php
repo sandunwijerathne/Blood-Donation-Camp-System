@@ -31,9 +31,16 @@ function sendJsonResponse(bool $success, string $message = '', array $data = [],
 /**
  * Get a setting value from the settings table.
  */
-function getSetting(string $key, string $default = ''): string
+function getSetting(string $key, string $default = '', bool $forget = false): string
 {
     static $cache = [];
+
+    // saveSetting() calls this to drop a stale entry, so a value read
+    // back later in the same request is the one just written.
+    if ($forget) {
+        unset($cache[$key]);
+        return '';
+    }
 
     if (isset($cache[$key])) {
         return $cache[$key];
@@ -59,9 +66,14 @@ function saveSetting(string $key, string $value): bool
 {
     try {
         $db = getDB();
-        $stmt = $db->prepare("INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) 
+        $stmt = $db->prepare("INSERT INTO settings (setting_key, setting_value) VALUES (?, ?)
                               ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
         $stmt->execute([$key, $value]);
+
+        // Drop the cached copy, otherwise anything reading this key later
+        // in the same request gets the value from before the save.
+        getSetting($key, '', true);
+
         return true;
     } catch (PDOException $e) {
         return false;
