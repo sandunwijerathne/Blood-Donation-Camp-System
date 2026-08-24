@@ -22,7 +22,7 @@ if (!validateCSRF()) {
     sendJsonResponse(false, 'Invalid security token.', [], 403);
 }
 
-function testWhatsAppMessage(string $phone, string $message): array
+function testWhatsAppMessage(string $phone, string $message, string $templateName = 'hello_world', string $language = 'en_US'): array
 {
     $token = getSetting('whatsapp_api_token');
     $phoneNumberId = getSetting('whatsapp_phone_number_id');
@@ -37,11 +37,20 @@ function testWhatsAppMessage(string $phone, string $message): array
     }
 
     $url = "https://graph.facebook.com/$version/$phoneNumberId/messages";
+
+    // Send a template rather than plain text: free text only arrives if
+    // the tester messaged this number in the last 24 hours, so it proves
+    // nothing. "hello_world" works on Meta's public test numbers; once a
+    // business registers its own number it must use its own approved
+    // template instead (Meta rejects hello_world with error 131058).
     $payload = [
         'messaging_product' => 'whatsapp',
-        'to' => ltrim($phone, '+'),
-        'type' => 'text',
-        'text' => ['preview_url' => false, 'body' => $message]
+        'to'                => ltrim($phone, '+'),
+        'type'              => 'template',
+        'template'          => [
+            'name'     => $templateName !== '' ? $templateName : 'hello_world',
+            'language' => ['code' => $language !== '' ? $language : 'en_US']
+        ]
     ];
 
     $ch = curl_init($url);
@@ -61,10 +70,31 @@ function testWhatsAppMessage(string $phone, string $message): array
     curl_close($ch);
 
     if ($response === false || $httpCode >= 400) {
-        return ['success' => false, 'message' => 'WhatsApp test failed: ' . ($error ?: (string) $response)];
+        $detail = $error ?: (string) $response;
+
+        if (stripos($detail, '131058') !== false || stripos($detail, 'Public Test Numbers') !== false) {
+            // The account has moved off Meta's shared test number.
+            $detail = 'Your own number is registered, so the "hello_world" template no longer works'
+                    . ' - Meta only allows it from their public test numbers. Create a template in'
+                    . ' WhatsApp Manager, wait for approval, then pick it in the WhatsApp Test'
+                    . ' Template box above. Your token and Phone Number ID are fine: this error'
+                    . ' only happens after authentication succeeds.';
+        } elseif (stripos($detail, 'not exist') !== false && stripos($detail, 'template') !== false) {
+            $detail .= ' - no approved template with that name and language. Check WhatsApp Manager'
+                     . ' -> Message Templates, and that the language code matches exactly.';
+        } elseif (stripos($detail, 'payment') !== false || stripos($detail, '131042') !== false) {
+            $detail .= ' - add a payment method to the WhatsApp Business Account. Business-initiated'
+                     . ' messages cannot be sent without one.';
+        } elseif ($httpCode === 401 || stripos($detail, 'access token') !== false) {
+            $detail .= ' - the access token is invalid or has expired. Temporary tokens last 24 hours.';
+        } elseif (stripos($detail, 'recipient') !== false) {
+            $detail .= ' - add this number to the allowed recipient list on the WhatsApp > API Setup page first.';
+        }
+
+        return ['success' => false, 'message' => 'WhatsApp test failed: ' . $detail];
     }
 
-    return ['success' => true, 'message' => 'WhatsApp test message sent.'];
+    return ['success' => true, 'message' => 'WhatsApp test message sent (hello_world template).'];
 }
 
 function testSmsMessage(string $phone, string $message): array
@@ -119,13 +149,21 @@ if ($action === 'test_whatsapp' || $action === 'test_sms') {
     $phone = trim($_POST['test_phone'] ?? '');
     $message = trim($_POST['test_message'] ?? '');
 
-    if ($phone === '' || $message === '') {
-        sendJsonResponse(false, 'Test phone and message are required.');
+    if ($phone === '') {
+        sendJsonResponse(false, 'A test phone number is required.');
+    }
+
+    // A WhatsApp test sends a template, so the free-text box is not used.
+    if ($action === 'test_sms' && $message === '') {
+        sendJsonResponse(false, 'A test message is required for SMS.');
     }
 
     $phone = formatPhoneForAPI($phone);
+    $testTemplate = trim($_POST['test_template'] ?? 'hello_world');
+    $testLanguage = trim($_POST['test_language'] ?? 'en_US');
+
     $result = $action === 'test_whatsapp'
-        ? testWhatsAppMessage($phone, $message)
+        ? testWhatsAppMessage($phone, $message, $testTemplate, $testLanguage)
         : testSmsMessage($phone, $message);
 
     sendJsonResponse($result['success'], $result['message']);
@@ -135,8 +173,10 @@ $allowed = [
     'app_name',
     'organization_name',
     'country_code',
+    'currency_symbol',
     'whatsapp_api_token',
     'whatsapp_phone_number_id',
+    'whatsapp_business_account_id',
     'whatsapp_api_version',
     'sms_gateway',
     'sms_api_key',
@@ -147,6 +187,15 @@ $allowed = [
 $values = [];
 foreach ($allowed as $key) {
     $values[$key] = trim($_POST[$key] ?? '');
+}
+
+// Secrets are never rendered back into the form, so a blank box means
+// "keep what is stored" rather than "erase it". Without this, saving the
+// General settings would silently wipe the WhatsApp token.
+foreach (['whatsapp_api_token', 'sms_api_secret'] as $secretKey) {
+    if ($values[$secretKey] === '') {
+        $values[$secretKey] = getSetting($secretKey, '');
+    }
 }
 
 $errors = [];
@@ -164,6 +213,12 @@ if (!in_array($values['sms_gateway'], ['twilio', 'dialog', 'mobitel'], true)) {
 
 if ($values['whatsapp_api_version'] === '') {
     $values['whatsapp_api_version'] = 'v23.0';
+}
+
+// A blank currency box falls back to the default rather than leaving
+// the budget screens showing bare numbers with no unit.
+if ($values['currency_symbol'] === '') {
+    $values['currency_symbol'] = 'Rs.';
 }
 
 if ($errors) {

@@ -31,9 +31,16 @@ function sendJsonResponse(bool $success, string $message = '', array $data = [],
 /**
  * Get a setting value from the settings table.
  */
-function getSetting(string $key, string $default = ''): string
+function getSetting(string $key, string $default = '', bool $forget = false): string
 {
     static $cache = [];
+
+    // saveSetting() calls this to drop a stale entry, so a value read
+    // back later in the same request is the one just written.
+    if ($forget) {
+        unset($cache[$key]);
+        return '';
+    }
 
     if (isset($cache[$key])) {
         return $cache[$key];
@@ -59,9 +66,14 @@ function saveSetting(string $key, string $value): bool
 {
     try {
         $db = getDB();
-        $stmt = $db->prepare("INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) 
+        $stmt = $db->prepare("INSERT INTO settings (setting_key, setting_value) VALUES (?, ?)
                               ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
         $stmt->execute([$key, $value]);
+
+        // Drop the cached copy, otherwise anything reading this key later
+        // in the same request gets the value from before the save.
+        getSetting($key, '', true);
+
         return true;
     } catch (PDOException $e) {
         return false;
@@ -305,4 +317,150 @@ function getBloodGroupGradient(string $group): string
         'O-'  => 'linear-gradient(135deg, #27ae60, #2ecc71)'
     ];
     return $gradients[$group] ?? 'linear-gradient(135deg, #95a5a6, #bdc3c7)';
+}
+
+// ═══════════════════════════════════════════════════════════
+// CAMP BUDGET, CONTRIBUTIONS AND EXPENSES
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * Format a money value for display.
+ *
+ * The currency symbol is a setting rather than a constant so the same
+ * code serves an organisation working in rupees and one that is not.
+ */
+function formatMoney(float|int|string|null $amount, bool $withSymbol = true): string
+{
+    if ($amount === null || $amount === '') {
+        return $withSymbol ? getSetting('currency_symbol', 'Rs.') . ' 0.00' : '0.00';
+    }
+
+    $formatted = number_format((float) $amount, 2);
+
+    return $withSymbol
+        ? getSetting('currency_symbol', 'Rs.') . ' ' . $formatted
+        : $formatted;
+}
+
+/**
+ * The kinds of thing a wellwisher hands over at a camp.
+ *
+ * 'Cash' is the odd one out: for that category the contribution's
+ * `amount` is an exact receipt, for every other category it is an
+ * optional estimate of what the goods were worth. Keeping the list
+ * here means the form, the validation and the export never drift.
+ */
+function campContributionCategories(): array
+{
+    return ['Food', 'Drinks', 'Water', 'Snacks', 'Medical', 'Equipment', 'Cash', 'Other'];
+}
+
+/**
+ * Icon for each contribution category, used on the cards and tables.
+ */
+function contributionCategoryIcon(string $category): string
+{
+    $icons = [
+        'Food'      => 'fa-utensils',
+        'Drinks'    => 'fa-mug-hot',
+        'Water'     => 'fa-bottle-water',
+        'Snacks'    => 'fa-cookie-bite',
+        'Medical'   => 'fa-kit-medical',
+        'Equipment' => 'fa-chair',
+        'Cash'      => 'fa-money-bill-wave',
+        'Other'     => 'fa-box'
+    ];
+    return $icons[$category] ?? 'fa-box';
+}
+
+/**
+ * The headings a camp's spending is broken down under.
+ */
+function campExpenseCategories(): array
+{
+    return ['Food', 'Drinks', 'Water', 'Transport', 'Printing', 'Venue', 'Medical', 'Decoration', 'Volunteer', 'Other'];
+}
+
+/**
+ * Payment methods an expense can be settled by.
+ */
+function campPaymentMethods(): array
+{
+    return ['Cash', 'Bank Transfer', 'Card', 'Online', 'Other'];
+}
+
+/**
+ * Every money figure for one camp, in one query pass.
+ *
+ * Donated goods are deliberately NOT added to the cash balance. A
+ * hundred water bottles handed over on the morning is real value, but
+ * it is not money the treasurer can spend, so it is reported on its
+ * own line as `inkind_value` and the balance stays honest.
+ */
+function getCampFinanceSummary(int $campId): array
+{
+    $summary = [
+        'budget'           => 0.0,
+        'cash_received'    => 0.0,
+        'cash_pledged'     => 0.0,
+        'inkind_value'     => 0.0,
+        'inkind_items'     => 0,
+        'contributors'     => 0,
+        'expenses_paid'    => 0.0,
+        'expenses_planned' => 0.0,
+        'balance'          => 0.0,
+        'remaining'        => 0.0,
+        'total_cost'       => 0.0
+    ];
+
+    if ($campId <= 0) {
+        return $summary;
+    }
+
+    $db = getDB();
+
+    $stmt = $db->prepare("SELECT budget_amount FROM blood_camps WHERE id = ? LIMIT 1");
+    $stmt->execute([$campId]);
+    $summary['budget'] = (float) ($stmt->fetchColumn() ?: 0);
+
+    $stmt = $db->prepare(
+        "SELECT
+            COALESCE(SUM(CASE WHEN category = 'Cash' AND status = 'Received' THEN amount END), 0)  AS cash_received,
+            COALESCE(SUM(CASE WHEN category = 'Cash' AND status = 'Pledged'  THEN amount END), 0)  AS cash_pledged,
+            COALESCE(SUM(CASE WHEN category <> 'Cash' AND status = 'Received' THEN amount END), 0) AS inkind_value,
+            COALESCE(SUM(CASE WHEN category <> 'Cash' THEN 1 ELSE 0 END), 0)                       AS inkind_items,
+            COUNT(DISTINCT contributor_name)                                                       AS contributors
+         FROM camp_contributions WHERE camp_id = ?"
+    );
+    $stmt->execute([$campId]);
+    $contrib = $stmt->fetch() ?: [];
+
+    $summary['cash_received'] = (float) ($contrib['cash_received'] ?? 0);
+    $summary['cash_pledged']  = (float) ($contrib['cash_pledged'] ?? 0);
+    $summary['inkind_value']  = (float) ($contrib['inkind_value'] ?? 0);
+    $summary['inkind_items']  = (int)   ($contrib['inkind_items'] ?? 0);
+    $summary['contributors']  = (int)   ($contrib['contributors'] ?? 0);
+
+    $stmt = $db->prepare(
+        "SELECT
+            COALESCE(SUM(CASE WHEN status = 'Paid'    THEN amount END), 0) AS paid,
+            COALESCE(SUM(CASE WHEN status = 'Planned' THEN amount END), 0) AS planned
+         FROM camp_expenses WHERE camp_id = ?"
+    );
+    $stmt->execute([$campId]);
+    $expense = $stmt->fetch() ?: [];
+
+    $summary['expenses_paid']    = (float) ($expense['paid'] ?? 0);
+    $summary['expenses_planned'] = (float) ($expense['planned'] ?? 0);
+
+    $summary['total_cost'] = $summary['expenses_paid'] + $summary['expenses_planned'];
+
+    // Money actually available: what was budgeted plus cash donations,
+    // less what has already been paid out.
+    $summary['balance'] = $summary['budget'] + $summary['cash_received'] - $summary['expenses_paid'];
+
+    // How much of the budget is still unspent once commitments are counted.
+    $summary['remaining'] = $summary['budget'] - $summary['total_cost'];
+
+    return $summary;
 }

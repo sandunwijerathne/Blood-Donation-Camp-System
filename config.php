@@ -17,8 +17,11 @@ if (defined('APP_CONFIG_LOADED')) {
 define('APP_CONFIG_LOADED', true);
 
 // ── Error Reporting ──────────────────────────────────────────
-// Set to false in production
-define('APP_DEBUG', true);
+// MUST stay false in production. When true, database errors and stack
+// traces are printed to whoever triggered them - and this system holds
+// donor names, phone numbers and blood groups.
+// Set to true only while debugging on a local machine.
+define('APP_DEBUG', false);
 
 if (APP_DEBUG) {
     error_reporting(E_ALL);

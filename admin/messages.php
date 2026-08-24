@@ -9,7 +9,9 @@ $pageTitle = 'Messages';
 require_once __DIR__ . '/../includes/header.php';
 
 $db = getDB();
-$templates = $db->query("SELECT id, template_name, template_body, template_type FROM message_templates ORDER BY template_name")->fetchAll();
+$templates = $db->query("SELECT id, template_name, template_body, template_type,
+                                whatsapp_template_name, whatsapp_language, whatsapp_variables
+                         FROM message_templates ORDER BY template_name")->fetchAll();
 $donors = $db->query("SELECT id, donor_name, mobile, whatsapp, blood_group FROM donors WHERE status = 'Active' ORDER BY donor_name")->fetchAll();
 $camps = $db->query("SELECT title, camp_date, location FROM blood_camps WHERE camp_date >= CURDATE() AND status = 'Upcoming' ORDER BY camp_date ASC LIMIT 10")->fetchAll();
 ?>
@@ -85,16 +87,37 @@ $camps = $db->query("SELECT title, camp_date, location FROM blood_camps WHERE ca
                                     <div class="form-text">Hold Ctrl to select multiple donors.</div>
                                 </div>
 
+                                <div class="col-12 d-none" id="sendModeWrap">
+                                    <label class="form-label">WhatsApp Delivery Mode</label>
+                                    <div class="btn-group w-100" role="group">
+                                        <input type="radio" class="btn-check" name="send_mode" id="modeTemplate" value="template" checked>
+                                        <label class="btn btn-outline-success" for="modeTemplate">
+                                            <i class="fas fa-certificate me-1"></i> Approved Template
+                                        </label>
+
+                                        <input type="radio" class="btn-check" name="send_mode" id="modeText" value="text">
+                                        <label class="btn btn-outline-secondary" for="modeText">
+                                            <i class="fas fa-comment-dots me-1"></i> Free Text (24h reply only)
+                                        </label>
+                                    </div>
+                                    <div class="form-text" id="sendModeHelp"></div>
+                                </div>
+
                                 <div class="col-md-6">
-                                    <label class="form-label">Template</label>
-                                    <select class="form-select" id="templateSelect">
+                                    <label class="form-label">Template <span class="text-danger" id="templateRequired">*</span></label>
+                                    <select class="form-select" name="template_id" id="templateSelect">
                                         <option value="">Start from blank message</option>
                                         <?php foreach ($templates as $template): ?>
-                                            <option value="<?= (int) $template['id'] ?>" data-body="<?= sanitize($template['template_body']) ?>">
+                                            <option value="<?= (int) $template['id'] ?>"
+                                                    data-body="<?= sanitize($template['template_body']) ?>"
+                                                    data-wa-name="<?= sanitize($template['whatsapp_template_name'] ?? '') ?>"
+                                                    data-wa-lang="<?= sanitize($template['whatsapp_language'] ?? 'en') ?>"
+                                                    data-wa-vars="<?= sanitize($template['whatsapp_variables'] ?? '') ?>">
                                                 <?= sanitize($template['template_name']) ?>
                                             </option>
                                         <?php endforeach; ?>
                                     </select>
+                                    <div class="form-text" id="templateWaInfo"></div>
                                 </div>
 
                                 <div class="col-md-6">
@@ -115,9 +138,9 @@ $camps = $db->query("SELECT title, camp_date, location FROM blood_camps WHERE ca
 
                                 <div class="col-12">
                                     <label class="form-label">Message <span class="text-danger">*</span></label>
-                                    <textarea class="form-control" name="message" id="messageBody" rows="8" required
+                                    <textarea class="form-control" name="message" id="messageBody" rows="8"
                                               placeholder="Use placeholders like {NAME}, {DATE}, {LOCATION}, {BLOOD_GROUP}."></textarea>
-                                    <div class="form-text">
+                                    <div class="form-text" id="messageBodyHelp">
                                         Placeholders are replaced per donor when sending.
                                     </div>
                                 </div>
@@ -223,9 +246,75 @@ $(document).ready(function () {
         $('#messagePreview').text(text);
     }
 
+    // ── Channel / delivery mode ──────────────────────────
+    function isWhatsApp() {
+        return $('input[name="channel"]:checked').val() === 'whatsapp';
+    }
+
+    function usingTemplate() {
+        return isWhatsApp() && $('#modeTemplate').is(':checked');
+    }
+
+    function updateChannelUi() {
+        // The template/free-text choice is a WhatsApp rule only.
+        $('#sendModeWrap').toggleClass('d-none', !isWhatsApp());
+
+        const template = usingTemplate();
+
+        $('#templateRequired').toggle(template);
+        $('#messageBody').prop('required', !template);
+
+        if (template) {
+            $('#sendModeHelp').html(
+                'Required for donors who have not messaged you in the last 24 hours. ' +
+                'The wording comes from the template Meta approved — the box below is a preview only.'
+            );
+            $('#messageBodyHelp').text('Preview of the approved template. Edits here are not sent in template mode.');
+            $('#messageBody').prop('readonly', true).addClass('bg-light');
+        } else if (isWhatsApp()) {
+            $('#sendModeHelp').html(
+                '<span class="text-warning"><i class="fas fa-triangle-exclamation me-1"></i>' +
+                'Only reaches donors who messaged you within the last 24 hours. Meta rejects the rest.</span>'
+            );
+            $('#messageBodyHelp').text('Placeholders are replaced per donor when sending.');
+            $('#messageBody').prop('readonly', false).removeClass('bg-light');
+        } else {
+            $('#messageBodyHelp').text('Placeholders are replaced per donor when sending.');
+            $('#messageBody').prop('readonly', false).removeClass('bg-light');
+        }
+
+        updateTemplateInfo();
+    }
+
+    function updateTemplateInfo() {
+        const $opt = $('#templateSelect option:selected');
+        const waName = $opt.data('wa-name') || '';
+        const waVars = $opt.data('wa-vars') || '';
+
+        if (!usingTemplate() || !$opt.val()) {
+            $('#templateWaInfo').empty();
+            return;
+        }
+
+        if (!waName) {
+            $('#templateWaInfo').html(
+                '<span class="text-danger"><i class="fas fa-circle-exclamation me-1"></i>' +
+                'No WhatsApp template name set — this cannot be sent. Add it on the Templates page.</span>'
+            );
+        } else {
+            $('#templateWaInfo').html(
+                '<span class="text-success"><i class="fas fa-check me-1"></i>Meta template: <code>' +
+                $('<span>').text(waName).html() + '</code>' +
+                (waVars ? ' · variables: ' + $('<span>').text(waVars).html() : '') + '</span>'
+            );
+        }
+    }
+
     $('#recipientType').on('change', updateRecipientFields);
     $('#campSelect').on('change', updateCampPlaceholders);
     $('#messageBody').on('input', updatePreview);
+    $('input[name="channel"]').on('change', updateChannelUi);
+    $('input[name="send_mode"]').on('change', updateChannelUi);
 
     $('#templateSelect').on('change', function () {
         const body = $(this).find(':selected').data('body') || '';
@@ -233,6 +322,7 @@ $(document).ready(function () {
             $('#messageBody').val(body);
             updatePreview();
         }
+        updateTemplateInfo();
     });
 
     const logTable = $('#messageLogTable').DataTable({
@@ -282,6 +372,22 @@ $(document).ready(function () {
             : '<?= BASE_URL ?>/ajax/send-whatsapp.php';
         const $btn = $('#btnSendMessage');
 
+        // Catch the two mistakes that would otherwise fail per-donor at Meta.
+        if (usingTemplate()) {
+            const $opt = $('#templateSelect option:selected');
+            if (!$opt.val()) {
+                showToast('Choose a template. WhatsApp needs an approved template for donors who have not messaged you.', 'error');
+                return;
+            }
+            if (!$opt.data('wa-name')) {
+                showToast('That template has no WhatsApp template name. Add it on the Templates page first.', 'error');
+                return;
+            }
+        } else if (!$('#messageBody').val().trim()) {
+            showToast('Message is required.', 'error');
+            return;
+        }
+
         setButtonLoading($btn);
 
         $.post(url, $(this).serialize(), function (res) {
@@ -299,6 +405,7 @@ $(document).ready(function () {
 
     updateRecipientFields();
     updateCampPlaceholders();
+    updateChannelUi();
     updatePreview();
 });
 </script>

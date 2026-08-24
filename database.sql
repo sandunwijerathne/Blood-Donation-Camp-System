@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS `blood_camps` (
     `end_time` TIME DEFAULT NULL,
     `location` TEXT NOT NULL,
     `description` TEXT DEFAULT NULL,
+    `budget_amount` DECIMAL(12,2) DEFAULT NULL,
     `status` ENUM('Upcoming','Completed','Cancelled') DEFAULT 'Upcoming',
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -82,6 +83,61 @@ CREATE TABLE IF NOT EXISTS `camp_registrations` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================
+-- 4b. CAMP CONTRIBUTIONS (food, drinks, water bottles, cash)
+--    What wellwishers GIVE to a camp. `amount` is the exact sum for
+--    category 'Cash' and an optional estimated value for goods, so a
+--    tray of buns is never mistaken for money in the tin.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `camp_contributions` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `camp_id` INT NOT NULL,
+    `contributor_name` VARCHAR(255) NOT NULL,
+    `mobile` VARCHAR(20) DEFAULT NULL,
+    `category` ENUM('Food','Drinks','Water','Snacks','Medical','Equipment','Cash','Other') NOT NULL DEFAULT 'Food',
+    `item_name` VARCHAR(255) DEFAULT NULL,
+    `quantity` DECIMAL(10,2) DEFAULT NULL,
+    `unit` VARCHAR(50) DEFAULT NULL,
+    `amount` DECIMAL(12,2) DEFAULT NULL,
+    `status` ENUM('Pledged','Received') NOT NULL DEFAULT 'Received',
+    `received_date` DATE DEFAULT NULL,
+    `remarks` TEXT DEFAULT NULL,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `recorded_by` INT DEFAULT NULL,
+    FOREIGN KEY (`camp_id`) REFERENCES `blood_camps`(`id`) ON DELETE CASCADE,
+    FOREIGN KEY (`recorded_by`) REFERENCES `admins`(`id`) ON DELETE SET NULL,
+    INDEX `idx_contrib_camp` (`camp_id`),
+    INDEX `idx_contrib_category` (`category`),
+    INDEX `idx_contrib_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================
+-- 4c. CAMP EXPENSES
+--    What the camp COST. 'Planned' rows are commitments not yet paid.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `camp_expenses` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `camp_id` INT NOT NULL,
+    `category` ENUM('Food','Drinks','Water','Transport','Printing','Venue','Medical','Decoration','Volunteer','Other') NOT NULL DEFAULT 'Other',
+    `description` VARCHAR(255) NOT NULL,
+    `paid_to` VARCHAR(255) DEFAULT NULL,
+    `amount` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    `payment_method` ENUM('Cash','Bank Transfer','Card','Online','Other') NOT NULL DEFAULT 'Cash',
+    `status` ENUM('Planned','Paid') NOT NULL DEFAULT 'Paid',
+    `expense_date` DATE DEFAULT NULL,
+    `receipt_no` VARCHAR(100) DEFAULT NULL,
+    `remarks` TEXT DEFAULT NULL,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `recorded_by` INT DEFAULT NULL,
+    FOREIGN KEY (`camp_id`) REFERENCES `blood_camps`(`id`) ON DELETE CASCADE,
+    FOREIGN KEY (`recorded_by`) REFERENCES `admins`(`id`) ON DELETE SET NULL,
+    INDEX `idx_expense_camp` (`camp_id`),
+    INDEX `idx_expense_category` (`category`),
+    INDEX `idx_expense_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================
 -- 5. MESSAGE LOGS
 -- ============================================================
 CREATE TABLE IF NOT EXISTS `message_logs` (
@@ -104,6 +160,12 @@ CREATE TABLE IF NOT EXISTS `message_templates` (
     `template_name` VARCHAR(255) NOT NULL,
     `template_body` TEXT NOT NULL,
     `template_type` ENUM('Camp Notification','Emergency Request','General') DEFAULT 'General',
+    -- WhatsApp requires a pre-approved template for any message sent
+    -- outside the 24-hour customer service window. These columns tie a
+    -- local template to the one approved in WhatsApp Manager.
+    `whatsapp_template_name` VARCHAR(255) DEFAULT NULL,
+    `whatsapp_language` VARCHAR(10) NOT NULL DEFAULT 'en',
+    `whatsapp_variables` VARCHAR(255) DEFAULT NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -140,10 +202,10 @@ INSERT INTO `admins` (`name`, `email`, `password`) VALUES
 ('Administrator', 'admin@admin.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi');
 
 -- Default message templates
-INSERT INTO `message_templates` (`template_name`, `template_body`, `template_type`) VALUES
-('Blood Camp Notification', 'Hello {NAME},\n\nOur upcoming blood donation camp will be held on:\n\nDate: {DATE}\nLocation: {LOCATION}\n\nWe would be grateful for your participation.\n\nThank you.', 'Camp Notification'),
-('Emergency Blood Request', 'Urgent Blood Request\n\nBlood Group: {BLOOD_GROUP}\nLocation: {LOCATION}\n\nPlease contact us immediately if you can donate.\n\nThank you.', 'Emergency Request'),
-('General Announcement', 'Hello {NAME},\n\n{MESSAGE}\n\nThank you.', 'General');
+INSERT INTO `message_templates` (`template_name`, `template_body`, `template_type`, `whatsapp_template_name`, `whatsapp_language`, `whatsapp_variables`) VALUES
+('Blood Camp Notification', 'Hello {NAME},\n\nOur upcoming blood donation camp will be held on:\n\nDate: {DATE}\nLocation: {LOCATION}\n\nWe would be grateful for your participation.\n\nThank you.', 'Camp Notification', 'blood_camp_notification', 'en', 'NAME,DATE,LOCATION'),
+('Emergency Blood Request', 'Urgent Blood Request\n\nBlood Group: {BLOOD_GROUP}\nLocation: {LOCATION}\n\nPlease contact us immediately if you can donate.\n\nThank you.', 'Emergency Request', 'emergency_blood_request', 'en', 'BLOOD_GROUP,LOCATION'),
+('General Announcement', 'Hello {NAME},\n\n{MESSAGE}\n\nThank you.', 'General', 'general_announcement', 'en', 'NAME,MESSAGE');
 
 -- Default settings
 INSERT INTO `settings` (`setting_key`, `setting_value`) VALUES
@@ -156,4 +218,5 @@ INSERT INTO `settings` (`setting_key`, `setting_value`) VALUES
 ('sms_gateway', 'twilio'),
 ('sms_api_key', ''),
 ('sms_api_secret', ''),
-('sms_sender_id', '');
+('sms_sender_id', ''),
+('currency_symbol', 'Rs.');

@@ -103,6 +103,25 @@ Supported blood groups:
 * Store camp location
 * Store camp description
 
+### 💰 Camp Budget & Donations
+
+* Set a planned budget per camp
+* Record what wellwishers donate to a camp — food, soft drinks, water
+  bottles, snacks, medical items, equipment, or cash
+* Track goods by quantity and unit, with an optional estimated value
+* Mark contributions as Pledged (promised) or Received
+* Record camp expenses by category, payee, payment method and receipt no
+* Separate Paid expenses from Planned ones still owed
+* Live totals: budget, cash donated, goods value, spent, still to pay,
+  balance in hand
+* Spending breakdown chart by category
+* Export the full accounts as a three-sheet Excel workbook, or the
+  donations / expenses list as CSV
+
+**Donated goods are never added to the cash balance.** A hundred donated
+water bottles are real value, but they are not money the treasurer can
+spend, so they are reported on their own line.
+
 ### 📱 Messaging
 
 Support for:
@@ -152,6 +171,14 @@ Stores donor information including:
 
 Stores blood donation camp information.
 
+### `camp_contributions`
+
+Food, drinks, water bottles and cash given to a camp by wellwishers.
+
+### `camp_expenses`
+
+What each camp cost to run.
+
 ### `message_logs`
 
 Stores WhatsApp and SMS communication history.
@@ -169,6 +196,8 @@ blood-donor-system/
 │   ├── donor-add.php
 │   ├── donor-edit.php
 │   ├── camps.php
+│   ├── camp-register.php
+│   ├── camp-finance.php
 │   ├── messages.php
 │   └── reports.php
 │
@@ -177,6 +206,10 @@ blood-donor-system/
 │   ├── donor-delete.php
 │   ├── send-whatsapp.php
 │   ├── send-sms.php
+│   ├── contribution-save.php
+│   ├── expense-save.php
+│   ├── camp-budget-save.php
+│   ├── camp-finance-export.php
 │   └── import-donors.php
 │
 ├── includes/

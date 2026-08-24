@@ -111,6 +111,16 @@ require_once __DIR__ . '/../includes/header.php';
                                 <option value="Cancelled">Cancelled</option>
                             </select>
                         </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label">Planned Budget</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><?= sanitize(getSetting('currency_symbol', 'Rs.')) ?></span>
+                                <input type="number" class="form-control" name="budget_amount" id="campBudget"
+                                       step="0.01" min="0" placeholder="Optional">
+                            </div>
+                            <div class="form-text">Track spending against this on Budget &amp; Donations.</div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -181,6 +191,10 @@ $(document).ready(function () {
                                class="btn btn-icon btn-outline-success" title="Open register">
                                 <i class="fas fa-clipboard-list"></i>
                             </a>
+                            <a href="<?= BASE_URL ?>/admin/camp-finance.php?camp_id=${data}"
+                               class="btn btn-icon btn-outline-warning" title="Budget & donations">
+                                <i class="fas fa-hand-holding-heart"></i>
+                            </a>
                             <button class="btn btn-icon btn-outline-primary btn-edit-camp" data-id="${data}" title="Edit">
                                 <i class="fas fa-edit"></i>
                             </button>
@@ -224,6 +238,7 @@ $(document).ready(function () {
         $('#campLocation').val(rowData.location);
         $('#campDescription').val(rowData.description || '');
         $('#campStatus').val(rowData.status);
+        $('#campBudget').val(rowData.budget_amount !== null ? rowData.budget_amount : '');
         $('#campModalTitle').html('<i class="fas fa-campground me-2 text-primary"></i> Edit Blood Camp');
 
         const modal = new bootstrap.Modal(document.getElementById('campModal'));
