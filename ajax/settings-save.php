@@ -110,12 +110,37 @@ function testSmsMessage(string $phone, string $message): array
         return ['success' => false, 'message' => 'SMS gateway credentials are not configured.'];
     }
 
-    if ($gateway !== 'twilio') {
-        return ['success' => false, 'message' => ucfirst($gateway) . ' test sending is not wired yet. Credentials were saved for provider setup.'];
-    }
-
     if (!function_exists('curl_init')) {
         return ['success' => false, 'message' => 'PHP cURL extension is not enabled.'];
+    }
+
+    if ($gateway === 'notify') {
+        $result = sendNotifySms($phone, $message, $apiKey, $apiSecret, $senderId);
+
+        if ($result['ok']) {
+            return ['success' => true, 'message' => 'SMS test message sent via Notify.lk.'];
+        }
+
+        // Notify's own wording is terse, so name the fix for the mistakes
+        // that actually happen during first-time setup.
+        $detail = $result['error'];
+        if (stripos($detail, 'sender') !== false) {
+            $detail .= ' - the Sender ID must be a name Notify has approved for your account. Use NotifyDEMO until yours is approved.';
+        } elseif (stripos($detail, 'balance') !== false || stripos($detail, 'credit') !== false) {
+            $detail .= ' - the Notify.lk account is out of credit.';
+        } elseif ($result['http'] === 401
+            || stripos($detail, 'unauthor') !== false
+            || stripos($detail, 'invalid') !== false
+            || stripos($detail, 'api key') !== false
+            || stripos($detail, 'user id') !== false) {
+            $detail .= ' - check the User ID and API Key against your Notify.lk settings page.';
+        }
+
+        return ['success' => false, 'message' => 'SMS test failed: ' . $detail];
+    }
+
+    if ($gateway !== 'twilio') {
+        return ['success' => false, 'message' => ucfirst($gateway) . ' test sending is not wired yet. Credentials were saved for provider setup.'];
     }
 
     $url = "https://api.twilio.com/2010-04-01/Accounts/$apiKey/Messages.json";
@@ -209,7 +234,7 @@ if ($values['country_code'] === '' || !preg_match('/^\+[0-9]{1,4}$/', $values['c
     $errors[] = 'Country code must look like +94.';
 }
 
-if (!in_array($values['sms_gateway'], ['twilio', 'dialog', 'mobitel'], true)) {
+if (!in_array($values['sms_gateway'], ['notify', 'twilio', 'dialog', 'mobitel'], true)) {
     $values['sms_gateway'] = 'twilio';
 }
 

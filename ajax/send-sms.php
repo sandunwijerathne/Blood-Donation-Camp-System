@@ -67,12 +67,24 @@ function sendSmsText(string $phone, string $message): array
         return ['status' => 'Pending', 'response' => 'SMS gateway credentials are not configured.'];
     }
 
-    if ($gateway !== 'twilio') {
-        return ['status' => 'Pending', 'response' => ucfirst($gateway) . ' gateway credentials saved; provider-specific endpoint not configured yet.'];
-    }
-
     if (!function_exists('curl_init')) {
         return ['status' => 'Failed', 'response' => 'PHP cURL extension is not enabled.'];
+    }
+
+    if ($gateway === 'notify') {
+        $result = sendNotifySms($phone, $message, $apiKey, $apiSecret, $senderId);
+
+        return [
+            'status' => $result['ok'] ? 'Sent' : 'Failed',
+            // Prefer Notify's raw body: it carries the reason a send was
+            // rejected, which is what makes a failed camp blast diagnosable
+            // from the message log weeks later.
+            'response' => $result['body'] !== '' ? $result['body'] : $result['error'],
+        ];
+    }
+
+    if ($gateway !== 'twilio') {
+        return ['status' => 'Pending', 'response' => ucfirst($gateway) . ' gateway credentials saved; provider-specific endpoint not configured yet.'];
     }
 
     $url = "https://api.twilio.com/2010-04-01/Accounts/$apiKey/Messages.json";

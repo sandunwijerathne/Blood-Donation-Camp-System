@@ -105,20 +105,21 @@ $settings = [
                     <div class="mb-3">
                         <label class="form-label">Gateway</label>
                         <select class="form-select" name="sms_gateway">
-                            <?php foreach (['twilio' => 'Twilio', 'dialog' => 'Dialog', 'mobitel' => 'Mobitel'] as $value => $label): ?>
+                            <?php foreach (['notify' => 'Notify.lk', 'twilio' => 'Twilio', 'dialog' => 'Dialog', 'mobitel' => 'Mobitel'] as $value => $label): ?>
                                 <option value="<?= sanitize($value) ?>" <?= $settings['sms_gateway'] === $value ? 'selected' : '' ?>>
                                     <?= sanitize($label) ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
-                        <div class="form-text">Twilio is wired for live API calls; Dialog and Mobitel are stored for provider setup.</div>
+                        <div class="form-text">Notify.lk and Twilio are wired for live API calls; Dialog and Mobitel are stored for provider setup.</div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">API Key / Account SID</label>
+                        <label class="form-label">User ID / Account SID</label>
                         <input type="text" class="form-control" name="sms_api_key" value="<?= sanitize($settings['sms_api_key']) ?>">
+                        <div class="form-text">Notify.lk: your numeric API User ID. Twilio: the Account SID.</div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">API Secret / Auth Token</label>
+                        <label class="form-label">API Key / Auth Token</label>
                         <?php $hasSmsSecret = $settings['sms_api_secret'] !== ''; ?>
                         <input type="password" class="form-control" name="sms_api_secret" value=""
                                autocomplete="off"
@@ -132,7 +133,8 @@ $settings = [
                     </div>
                     <div class="mb-0">
                         <label class="form-label">Sender ID / From Number</label>
-                        <input type="text" class="form-control" name="sms_sender_id" value="<?= sanitize($settings['sms_sender_id']) ?>" placeholder="+1234567890">
+                        <input type="text" class="form-control" name="sms_sender_id" value="<?= sanitize($settings['sms_sender_id']) ?>" placeholder="NotifyDEMO">
+                        <div class="form-text">Notify.lk: an approved sender <em>name</em> such as NotifyDEMO - not a phone number. Twilio: the From number.</div>
                     </div>
                 </div>
             </div>

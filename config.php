@@ -86,3 +86,9 @@ date_default_timezone_set('Asia/Colombo');
 
 // ── Eligible Donor Interval (months) ─────────────────────────
 define('ELIGIBLE_MONTHS', 4);
+
+// ── SMS Limits ───────────────────────────────────────────────
+// Notify.lk rejects anything longer. Counted in characters, so a Sinhala
+// message costs the same against this cap as an English one - though it
+// will use more SMS segments on the carrier side.
+define('NOTIFY_SMS_MAX_CHARS', 320);

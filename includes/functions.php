@@ -464,3 +464,82 @@ function getCampFinanceSummary(int $campId): array
 
     return $summary;
 }
+
+/**
+ * Send one SMS through Notify.lk.
+ *
+ * Notify's whole API is a single form-encoded POST, so there is no client
+ * library here on purpose - the official notifylk/notify-php discards the
+ * response body, and that body is the only place Notify reports whether a
+ * message was actually accepted.
+ *
+ * The shared SMS settings map onto Notify's parameters as:
+ *   sms_api_key    -> user_id    (numeric API user id)
+ *   sms_api_secret -> api_key
+ *   sms_sender_id  -> sender_id  (an approved name such as NotifyDEMO,
+ *                                 never a phone number)
+ *
+ * Returns ['ok' => bool, 'http' => int, 'body' => string, 'error' => string]
+ * so callers can decide how to phrase success and failure themselves.
+ */
+function sendNotifySms(string $phone, string $message, string $userId, string $apiKey, string $senderId): array
+{
+    // Notify wants 9471XXXXXXX - country code, no plus, no leading zero.
+    $to = ltrim($phone, '+');
+
+    // Counted in characters, not bytes: a Sinhala message is multi-byte and
+    // strlen() would reject valid messages well before Notify does.
+    $length = mb_strlen($message);
+    if ($length > NOTIFY_SMS_MAX_CHARS) {
+        return [
+            'ok'    => false,
+            'http'  => 0,
+            'body'  => '',
+            'error' => "Message is $length characters; Notify.lk accepts at most " . NOTIFY_SMS_MAX_CHARS . '.',
+        ];
+    }
+
+    $ch = curl_init('https://app.notify.lk/api/v1/send');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => http_build_query([
+            'user_id'   => $userId,
+            'api_key'   => $apiKey,
+            'sender_id' => $senderId,
+            'to'        => $to,
+            'message'   => $message,
+        ]),
+        CURLOPT_TIMEOUT        => 20,
+    ]);
+    $response = curl_exec($ch);
+    $error    = curl_error($ch);
+    $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($response === false) {
+        return ['ok' => false, 'http' => $httpCode, 'body' => '', 'error' => $error ?: 'No response from Notify.lk.'];
+    }
+
+    // Notify answers 200 with {"status":"error"} for a rejected send, so the
+    // decoded body decides the outcome - the HTTP code on its own would
+    // report those failures as successes.
+    $body = json_decode((string) $response, true);
+    $ok   = $httpCode < 400 && is_array($body) && ($body['status'] ?? '') === 'success';
+
+    $error = '';
+    if (!$ok) {
+        if (!is_array($body)) {
+            $error = 'Unreadable response from Notify.lk.';
+        } else {
+            // Field-level problems come back as {"errors":["..."]} while other
+            // failures use a single message, so read both shapes.
+            $errors = $body['errors'] ?? null;
+            $error = (is_array($errors) && $errors)
+                ? implode(' ', array_map('strval', $errors))
+                : (string) ($body['message'] ?? $body['error'] ?? 'Notify.lk rejected the message.');
+        }
+    }
+
+    return ['ok' => $ok, 'http' => $httpCode, 'body' => (string) $response, 'error' => $error];
+}
