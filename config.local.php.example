@@ -1,0 +1,45 @@
+<?php
+/**
+ * Local / production configuration overrides.
+ *
+ * HOW TO USE
+ *   1. Copy this file to  config.local.php  on the server.
+ *   2. Fill in the real values.
+ *   3. Never commit it - .gitignore already excludes config.local.php.
+ *
+ * config.php loads this file first, and only defines its own defaults for
+ * anything left undefined here. Anything you do not set keeps the default.
+ *
+ * This file exists so that database credentials and the canonical hostname
+ * live OUTSIDE version control. Before it, the application connected as
+ * MySQL root with an empty password, committed to a public repository.
+ */
+
+// ── Database ─────────────────────────────────────────────────
+// Create a least-privilege user first - do NOT use root. See
+// docs/create-db-user.sql for the exact GRANT statements.
+define('DB_HOST', 'localhost');
+define('DB_NAME', 'blood_donor_system');
+define('DB_USER', 'bdms_app');
+define('DB_PASS', 'put-the-real-password-here');
+
+// ── Canonical host ───────────────────────────────────────────
+// Pin the hostname the site is served from. Leave undefined only on a
+// local machine.
+//
+// Without this, BASE_URL is built from the client-supplied Host header,
+// so a request carrying "Host: evil.example.com" produces redirects and
+// asset URLs pointing at that domain.
+//
+// define('APP_CANONICAL_HOST', 'donors.example.lk');
+
+// ── Error log ────────────────────────────────────────────────
+// Must be outside the web root. Defaults to ROOT_PATH/storage/logs,
+// which .htaccess denies, but a path outside the document root is better.
+//
+// define('APP_ERROR_LOG', '/var/log/bdms/php-error.log');
+
+// ── Debug ────────────────────────────────────────────────────
+// Leave false in production. True prints database errors and stack traces
+// to whoever triggered them, on a system holding donor health data.
+define('APP_DEBUG', false);

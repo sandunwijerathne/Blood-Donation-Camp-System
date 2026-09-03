@@ -33,10 +33,25 @@ if (!isset($_FILES['excel_file']) || $_FILES['excel_file']['error'] !== UPLOAD_E
 
 $file = $_FILES['excel_file'];
 $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-$allowed = ['xlsx', 'xls', 'csv'];
 
-if (!in_array($ext, $allowed)) {
-    sendJsonResponse(false, 'Invalid file format. Allowed: .xlsx, .xls, .csv');
+// .xls is deliberately NOT accepted. The legacy OLE reader that handles
+// it is the subject of CVE-2026-59933 (sector-chain self-loop, memory
+// exhaustion) in the installed PhpSpreadsheet 1.30.5. Re-save old .xls
+// files as .xlsx or CSV before importing.
+$allowed = ['xlsx', 'csv'];
+
+if (!in_array($ext, $allowed, true)) {
+    sendJsonResponse(false, 'Invalid file format. Allowed: .xlsx or .csv. Re-save .xls files as .xlsx first.');
+}
+
+// Explicit size cap. php.ini's upload_max_filesize is the only other
+// limit, and it is set by the host rather than by this application.
+if ($file['size'] > IMPORT_MAX_BYTES) {
+    sendJsonResponse(false, sprintf(
+        'File is %.1f MB. The limit is %d MB.',
+        $file['size'] / 1048576,
+        IMPORT_MAX_BYTES / 1048576
+    ));
 }
 
 // Move to uploads
@@ -53,7 +68,19 @@ if (!move_uploaded_file($file['tmp_name'], $filepath)) {
 }
 
 try {
-    $spreadsheet = IOFactory::load($filepath);
+    // Pin the reader instead of using IOFactory::load(), which sniffs the
+    // file's CONTENT and picks a reader accordingly - so a Gnumeric or OLE
+    // payload named ".xlsx" would still reach a vulnerable reader despite
+    // the extension whitelist above. Naming the reader means the Xls and
+    // Gnumeric readers are never instantiated at all, which closes
+    // CVE-2026-59933 and CVE-2026-59932.
+    $reader = IOFactory::createReader($ext === 'csv' ? 'Csv' : 'Xlsx');
+
+    // Data only: no styles, and no formula evaluation. That also avoids
+    // CVE-2026-59931, an SSRF through the WEBSERVICE() formula function.
+    $reader->setReadDataOnly(true);
+
+    $spreadsheet = $reader->load($filepath);
     $sheet = $spreadsheet->getActiveSheet();
     $rows = $sheet->toArray(null, true, true, true);
 

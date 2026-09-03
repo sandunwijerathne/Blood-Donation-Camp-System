@@ -1,0 +1,40 @@
+# ── Local configuration ──────────────────────────────────────
+# Production credentials live here and must never be committed.
+# config.php reads this file when it exists; see config.local.php.example
+config.local.php
+
+# ── Composer ─────────────────────────────────────────────────
+# composer.phar was previously committed and served publicly at
+# /composer.phar. Keep it locally, keep it out of the repository.
+#
+# vendor/ stays tracked on purpose: this deploys by file copy to shared
+# hosting, where composer is not available to rebuild it.
+composer.phar
+
+# ── Runtime data ─────────────────────────────────────────────
+# Donor spreadsheets are personal health data. They must not reach git.
+uploads/
+storage/logs/
+*.log
+
+# ── Database dumps ───────────────────────────────────────────
+# A dump of this database contains 488 people's names, phone numbers
+# and blood groups. Never commit one.
+backups/
+*.sql.gz
+dump*.sql
+backup*.sql
+
+# ── Donor source material ────────────────────────────────────
+# Register-book photographs are personal health records.
+blood-doner-details/
+blood-donor-details/
+
+# ── OS / editor noise ────────────────────────────────────────
+Thumbs.db
+desktop.ini
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
