@@ -176,8 +176,35 @@ $settings = [
                     </div>
 
                     <div class="mb-3">
+                        <label class="form-label">SMS Test Template</label>
+                        <select class="form-select" id="testSmsTemplate">
+                            <option value="">Custom message (type your own below)</option>
+                            <?php
+                            $smsTemplates = getDB()->query(
+                                "SELECT id, template_name, template_body, whatsapp_language
+                                 FROM message_templates
+                                 ORDER BY template_name"
+                            )->fetchAll();
+
+                            $smsTemplateBodies = [];
+                            foreach ($smsTemplates as $t):
+                                $smsTemplateBodies[(int) $t['id']] = $t['template_body'];
+                            ?>
+                                <option value="<?= (int) $t['id'] ?>">
+                                    <?= sanitize($t['template_name']) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                        <div class="form-text">
+                            Fills the box below with that template, sample values already
+                            substituted, so the test reads exactly like a real message.
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
                         <label class="form-label">Message <span class="text-muted small">(SMS only)</span></label>
-                        <textarea class="form-control" id="testMessage" rows="3">This is a test message from the Blood Donor Management System.</textarea>
+                        <textarea class="form-control" id="testMessage" rows="4">This is a test message from the Blood Donor Management System.</textarea>
+                        <div class="form-text" id="testMessageMeta"></div>
                     </div>
                     <div class="d-flex gap-2 flex-wrap">
                         <button type="button" class="btn btn-outline-success" id="btnTestWhatsapp">
@@ -377,6 +404,67 @@ $(document).ready(function () {
             setButtonLoading($btn, false);
         });
     }
+
+    // ── SMS test template picker ─────────────────────
+    // Bodies are rendered here rather than fetched, so picking a template
+    // is instant and works with the page's existing CSRF-free test flow.
+    const smsTemplates = <?= json_encode($smsTemplateBodies, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+
+    const sampleValues = {
+        NAME: 'Test User',
+        DATE: '<?= date('d M Y', strtotime('+7 days')) ?>',
+        LOCATION: '<?= sanitize(getSetting('organization_name', 'Test Location')) ?>',
+        BLOOD_GROUP: 'O+',
+        MESSAGE: 'This is a test message.'
+    };
+
+    /**
+     * Characters and segment count for an SMS.
+     *
+     * Any character outside ASCII forces the carrier into UCS-2, which
+     * carries 70 characters per segment instead of 160 - so a Sinhala
+     * message costs roughly three times what the same message costs in
+     * English. Counting codepoints (not UTF-16 units) matches what
+     * mb_strlen() sees server-side.
+     */
+    function smsMeta(text) {
+        const unicode = [...text].some(function (ch) { return ch.codePointAt(0) > 127; });
+        const len = [...text].length;
+        const single = unicode ? 70 : 160;
+        const multi = unicode ? 67 : 153;
+        const segments = len === 0 ? 0 : (len <= single ? 1 : Math.ceil(len / multi));
+        return { unicode: unicode, len: len, segments: segments };
+    }
+
+    function updateTestMessageMeta() {
+        const m = smsMeta($('#testMessage').val());
+        const over = m.len > <?= NOTIFY_SMS_MAX_CHARS ?>;
+        $('#testMessageMeta')
+            .toggleClass('text-danger', over)
+            .html(
+                m.len + ' characters · '
+                + (m.unicode ? 'Unicode (UCS-2), 70 per segment' : 'GSM-7, 160 per segment')
+                + ' · ' + m.segments + ' SMS segment' + (m.segments === 1 ? '' : 's')
+                + (over ? ' · over the ' + <?= NOTIFY_SMS_MAX_CHARS ?> + ' character limit' : '')
+            );
+    }
+
+    $('#testSmsTemplate').on('change', function () {
+        const id = $(this).val();
+        if (!id) return;  // "Custom message" leaves whatever is typed alone
+
+        let body = smsTemplates[id] || '';
+        // Mirrors replacePlaceholders() server-side, so the preview matches
+        // what a real send would produce.
+        Object.keys(sampleValues).forEach(function (k) {
+            body = body.split('{' + k + '}').join(sampleValues[k]);
+        });
+        $('#testMessage').val(body);
+        updateTestMessageMeta();
+    });
+
+    $('#testMessage').on('input', updateTestMessageMeta);
+    updateTestMessageMeta();
 
     $('#btnTestWhatsapp').on('click', function () {
         sendTest('test_whatsapp', $(this));

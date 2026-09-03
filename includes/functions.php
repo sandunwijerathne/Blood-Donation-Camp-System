@@ -507,17 +507,30 @@ function sendNotifySms(string $phone, string $message, string $userId, string $a
         ];
     }
 
+    $fields = [
+        'user_id'   => $userId,
+        'api_key'   => $apiKey,
+        'sender_id' => $senderId,
+        'to'        => $to,
+        'message'   => $message,
+    ];
+
+    // Notify encodes as GSM-7 by default, and GSM-7 has no Sinhala
+    // characters - the message arrives as a row of "?". type=unicode
+    // switches the send to UCS-2.
+    //
+    // Only set it when the text actually needs it: UCS-2 carries 70
+    // characters per segment instead of 160, so forcing it on an English
+    // message would roughly double what that message costs to send.
+    if (!mb_check_encoding($message, 'ASCII')) {
+        $fields['type'] = 'unicode';
+    }
+
     $ch = curl_init('https://app.notify.lk/api/v1/send');
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => http_build_query([
-            'user_id'   => $userId,
-            'api_key'   => $apiKey,
-            'sender_id' => $senderId,
-            'to'        => $to,
-            'message'   => $message,
-        ]),
+        CURLOPT_POSTFIELDS     => http_build_query($fields),
         CURLOPT_TIMEOUT        => 20,
     ]);
     $response = curl_exec($ch);
