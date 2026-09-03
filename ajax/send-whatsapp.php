@@ -57,6 +57,23 @@ function messagingDonorQuery(string $recipientType, string $bloodGroup, array $d
 }
 
 /**
+ * Active organising-committee members.
+ *
+ * Aliased to match messagingDonorQuery() so the send loop treats both the
+ * same. Staff keep one number, so `whatsapp` is null and the loop's
+ * `whatsapp ?: mobile` fallback picks up the mobile.
+ */
+function messagingStaffQuery(): array
+{
+    return getDB()->query(
+        "SELECT id, name AS donor_name, mobile, NULL AS whatsapp, NULL AS blood_group
+         FROM staff
+         WHERE status = 'Active'
+         ORDER BY name"
+    )->fetchAll();
+}
+
+/**
  * Build the Meta payload for a pre-approved template message.
  *
  * WhatsApp templates use numbered variables ({{1}}, {{2}}...). This app
@@ -196,9 +213,15 @@ try {
         }
     }
 
-    $donors = messagingDonorQuery($recipientType, $bloodGroup, $donorIds);
-    if (!$donors) {
-        sendJsonResponse(false, 'No matching active donors found.');
+    $isStaff = ($recipientType === 'staff');
+    $recipients = $isStaff
+        ? messagingStaffQuery()
+        : messagingDonorQuery($recipientType, $bloodGroup, $donorIds);
+
+    if (!$recipients) {
+        sendJsonResponse(false, $isStaff
+            ? 'No active staff found. Add the committee on the Staff page first.'
+            : 'No matching active donors found.');
     }
 
     $sent = 0;
@@ -206,13 +229,13 @@ try {
     $failed = 0;
     $firstError = '';
 
-    foreach ($donors as $donor) {
+    foreach ($recipients as $donor) {
         $mobile = $donor['whatsapp'] ?: $donor['mobile'];
         $phone  = formatPhoneForAPI($mobile);
 
         $values = [
             'name'        => $donor['donor_name'],
-            'blood_group' => $donor['blood_group'],
+            'blood_group' => $donor['blood_group'] ?? '',
             'date'        => $_POST['date'] ?? '',
             'location'    => $_POST['location'] ?? '',
             'message'     => $_POST['custom_message'] ?? ''
@@ -240,7 +263,15 @@ try {
         }
 
         $result = sendWhatsAppPayload($payload);
-        logMessage((int) $donor['id'], 'WhatsApp', $phone, $logBody, $result['status'], $result['response']);
+        logMessage(
+            $isStaff ? null : (int) $donor['id'],
+            'WhatsApp',
+            $phone,
+            $logBody,
+            $result['status'],
+            $result['response'],
+            $isStaff ? (int) $donor['id'] : null
+        );
 
         if ($result['status'] === 'Sent') {
             $sent++;

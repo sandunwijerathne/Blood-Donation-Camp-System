@@ -272,14 +272,22 @@ function replacePlaceholders(string $template, array $data): string
 /**
  * Log a sent message.
  */
-function logMessage(int $donorId, string $type, string $mobile, string $message, string $status, string $apiResponse = ''): int
+/**
+ * Record one sent message.
+ *
+ * A row belongs to a donor or to a staff member, never both. donor_id has
+ * a foreign key into donors, so a staff id cannot be squeezed into it -
+ * pass null there and give the id as $staffId instead. Both being null is
+ * valid too: that is a message to a recipient who has since been deleted.
+ */
+function logMessage(?int $donorId, string $type, string $mobile, string $message, string $status, string $apiResponse = '', ?int $staffId = null): int
 {
     $db = getDB();
     $stmt = $db->prepare(
-        "INSERT INTO message_logs (donor_id, message_type, mobile, message, status, api_response, sent_at) 
-         VALUES (?, ?, ?, ?, ?, ?, NOW())"
+        "INSERT INTO message_logs (donor_id, staff_id, message_type, mobile, message, status, api_response, sent_at) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, NOW())"
     );
-    $stmt->execute([$donorId, $type, $mobile, $message, $status, $apiResponse]);
+    $stmt->execute([$donorId ?: null, $staffId ?: null, $type, $mobile, $message, $status, $apiResponse]);
     return (int) $db->lastInsertId();
 }
 

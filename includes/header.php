@@ -101,6 +101,10 @@ $appName = getSetting('app_name', APP_NAME);
                 <i class="fas fa-users"></i>
                 <span>Donors</span>
             </a>
+            <a href="<?= BASE_URL ?>/admin/staff.php" class="nav-link <?= $currentPage === 'staff' ? 'active' : '' ?>">
+                <i class="fas fa-users-gear"></i>
+                <span>Staff</span>
+            </a>
             <a href="<?= BASE_URL ?>/admin/camps.php" class="nav-link <?= $currentPage === 'camps' ? 'active' : '' ?>">
                 <i class="fas fa-campground"></i>
                 <span>Blood Camps</span>

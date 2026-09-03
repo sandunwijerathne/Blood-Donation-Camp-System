@@ -27,16 +27,16 @@ $orderDir = ($_POST['order'][0]['dir'] ?? 'desc') === 'asc' ? 'ASC' : 'DESC';
 $messageType = trim($_POST['message_type'] ?? '');
 $status = trim($_POST['status'] ?? '');
 
-$columns = ['ml.sent_at', 'd.donor_name', 'ml.message_type', 'ml.mobile', 'ml.message', 'ml.status'];
+$columns = ['ml.sent_at', 'COALESCE(d.donor_name, st.name)', 'ml.message_type', 'ml.mobile', 'ml.message', 'ml.status'];
 $orderColumn = $columns[$orderCol] ?? 'ml.sent_at';
 
 $where = [];
 $params = [];
 
 if ($searchValue !== '') {
-    $where[] = "(d.donor_name LIKE ? OR ml.mobile LIKE ? OR ml.message LIKE ? OR ml.status LIKE ?)";
+    $where[] = "(d.donor_name LIKE ? OR st.name LIKE ? OR ml.mobile LIKE ? OR ml.message LIKE ? OR ml.status LIKE ?)";
     $search = '%' . $searchValue . '%';
-    $params = array_merge($params, [$search, $search, $search, $search]);
+    $params = array_merge($params, [$search, $search, $search, $search, $search]);
 }
 
 if (in_array($messageType, ['WhatsApp', 'SMS'], true)) {
@@ -56,15 +56,18 @@ $totalRecords = (int) $db->query("SELECT COUNT(*) FROM message_logs")->fetchColu
 $countSql = "SELECT COUNT(*)
              FROM message_logs ml
              LEFT JOIN donors d ON d.id = ml.donor_id
+             LEFT JOIN staff  st ON st.id = ml.staff_id
              $whereClause";
 $stmt = $db->prepare($countSql);
 $stmt->execute($params);
 $filteredRecords = (int) $stmt->fetchColumn();
 
 $sql = "SELECT ml.id, ml.sent_at, ml.message_type, ml.mobile, ml.message, ml.status,
-               COALESCE(d.donor_name, 'Unknown donor') AS donor_name
+               COALESCE(d.donor_name, st.name, 'Unknown recipient') AS donor_name,
+               CASE WHEN ml.staff_id IS NOT NULL THEN 'Staff' ELSE 'Donor' END AS recipient_kind
         FROM message_logs ml
         LEFT JOIN donors d ON d.id = ml.donor_id
+        LEFT JOIN staff  st ON st.id = ml.staff_id
         $whereClause
         ORDER BY $orderColumn $orderDir
         LIMIT $length OFFSET $start";

@@ -138,22 +138,49 @@ CREATE TABLE IF NOT EXISTS `camp_expenses` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================
--- 5. MESSAGE LOGS
+-- 5. STAFF (camp organising committee)
+--
+-- People who run a camp rather than give blood, so only a name and a
+-- mobile number are kept. `mobile` is UNIQUE and every write goes
+-- through normalizeMobile() first, so one person cannot get in twice
+-- as "077 821 1176" and "+94778211176".
+--
+-- Defined before message_logs because that table has a foreign key
+-- pointing at this one.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `staff` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `name` VARCHAR(255) NOT NULL,
+    `mobile` VARCHAR(20) NOT NULL UNIQUE,
+    `status` ENUM('Active','Inactive') NOT NULL DEFAULT 'Active',
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX `idx_staff_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================
+-- 6. MESSAGE LOGS
+--
+-- A row belongs to a donor or to a staff member, never both: the two
+-- ids have foreign keys into different tables. Both null means the
+-- recipient has since been deleted, and the message stays as a record.
 -- ============================================================
 CREATE TABLE IF NOT EXISTS `message_logs` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
     `donor_id` INT DEFAULT NULL,
+    `staff_id` INT DEFAULT NULL,
     `message_type` ENUM('WhatsApp','SMS') NOT NULL,
     `mobile` VARCHAR(20) NOT NULL,
     `message` TEXT NOT NULL,
     `status` VARCHAR(50) DEFAULT 'Pending',
     `api_response` TEXT DEFAULT NULL,
     `sent_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (`donor_id`) REFERENCES `donors`(`id`) ON DELETE SET NULL
+    FOREIGN KEY (`donor_id`) REFERENCES `donors`(`id`) ON DELETE SET NULL,
+    FOREIGN KEY (`staff_id`) REFERENCES `staff`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================
--- 6. MESSAGE TEMPLATES
+-- 7. MESSAGE TEMPLATES
 -- ============================================================
 CREATE TABLE IF NOT EXISTS `message_templates` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -170,7 +197,7 @@ CREATE TABLE IF NOT EXISTS `message_templates` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================
--- 7. SETTINGS (key-value store)
+-- 8. SETTINGS (key-value store)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS `settings` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,

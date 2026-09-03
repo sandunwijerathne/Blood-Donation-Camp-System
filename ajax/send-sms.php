@@ -56,6 +56,23 @@ function smsDonorQuery(string $recipientType, string $bloodGroup, array $donorId
     return $stmt->fetchAll();
 }
 
+/**
+ * Active organising-committee members.
+ *
+ * Columns are aliased to match smsDonorQuery() so the send loop below does
+ * not have to care which of the two lists it is walking. Staff have no
+ * blood group; the placeholder resolves to an empty string for them.
+ */
+function smsStaffQuery(): array
+{
+    return getDB()->query(
+        "SELECT id, name AS donor_name, mobile, NULL AS blood_group
+         FROM staff
+         WHERE status = 'Active'
+         ORDER BY name"
+    )->fetchAll();
+}
+
 function sendSmsText(string $phone, string $message): array
 {
     $gateway = strtolower(getSetting('sms_gateway', 'twilio'));
@@ -127,26 +144,43 @@ if ($message === '') {
 }
 
 try {
-    $donors = smsDonorQuery($recipientType, $bloodGroup, $donorIds);
-    if (!$donors) {
-        sendJsonResponse(false, 'No matching active donors found.');
+    $isStaff = ($recipientType === 'staff');
+    $recipients = $isStaff
+        ? smsStaffQuery()
+        : smsDonorQuery($recipientType, $bloodGroup, $donorIds);
+
+    if (!$recipients) {
+        sendJsonResponse(false, $isStaff
+            ? 'No active staff found. Add the committee on the Staff page first.'
+            : 'No matching active donors found.');
     }
 
     $sent = 0;
     $pending = 0;
     $failed = 0;
 
-    foreach ($donors as $donor) {
-        $phone = formatPhoneForAPI($donor['mobile']);
+    foreach ($recipients as $person) {
+        $phone = formatPhoneForAPI($person['mobile']);
         $body = replacePlaceholders($message, [
-            'name' => $donor['donor_name'],
-            'blood_group' => $donor['blood_group'],
+            'name' => $person['donor_name'],
+            'blood_group' => $person['blood_group'] ?? '',
             'date' => $_POST['date'] ?? '',
             'location' => $_POST['location'] ?? '',
             'message' => $_POST['custom_message'] ?? ''
         ]);
         $result = sendSmsText($phone, $body);
-        logMessage((int) $donor['id'], 'SMS', $phone, $body, $result['status'], $result['response']);
+
+        // The id means different things in the two cases, so it goes into
+        // whichever column has the matching foreign key.
+        logMessage(
+            $isStaff ? null : (int) $person['id'],
+            'SMS',
+            $phone,
+            $body,
+            $result['status'],
+            $result['response'],
+            $isStaff ? (int) $person['id'] : null
+        );
 
         if ($result['status'] === 'Sent') {
             $sent++;

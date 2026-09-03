@@ -62,6 +62,7 @@ $camps = $db->query("SELECT title, camp_date, location FROM blood_camps WHERE ca
                                         <option value="all">All active donors</option>
                                         <option value="blood_group">By blood group</option>
                                         <option value="selected">Selected donors</option>
+                                        <option value="staff">Organising committee (staff)</option>
                                     </select>
                                 </div>
 
