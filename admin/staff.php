@@ -122,8 +122,8 @@ $(document).ready(function () {
             }
         },
         columns: [
-            { data: 'name' },
-            { data: 'mobile' },
+            { data: 'name', render: $.fn.dataTable.render.text() },
+            { data: 'mobile', render: $.fn.dataTable.render.text() },
             {
                 data: 'status',
                 render: function (data) {

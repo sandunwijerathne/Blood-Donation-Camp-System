@@ -60,7 +60,11 @@ if (!is_dir($uploadDir)) {
     mkdir($uploadDir, 0755, true);
 }
 
-$filename = 'import_' . date('Y-m-d_His') . '.' . $ext;
+// A timestamp is guessable, and the old upload directory was publicly
+// reachable - so for the seconds a file existed, anyone could fetch a
+// spreadsheet of donor health data by predicting its name. Random bytes
+// remove that even if the directory is ever exposed again.
+$filename = 'import_' . bin2hex(random_bytes(16)) . '.' . $ext;
 $filepath = $uploadDir . '/' . $filename;
 
 if (!move_uploaded_file($file['tmp_name'], $filepath)) {

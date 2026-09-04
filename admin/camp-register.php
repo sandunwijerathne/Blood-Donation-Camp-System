@@ -325,7 +325,7 @@ $(document).ready(function () {
                     return html;
                 }
             },
-            { data: 'mobile' },
+            { data: 'mobile', render: $.fn.dataTable.render.text() },
             {
                 data: 'blood_group',
                 render: d => d ? '<span class="badge bg-danger-subtle text-danger fw-semibold">' + d + '</span>' : '—'

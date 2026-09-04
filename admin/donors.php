@@ -150,8 +150,8 @@ $(document).ready(function () {
                     return '<input type="checkbox" class="form-check-input row-select" value="' + data + '">';
                 }
             },
-            { data: 'donor_name' },
-            { data: 'mobile' },
+            { data: 'donor_name', render: $.fn.dataTable.render.text() },
+            { data: 'mobile', render: $.fn.dataTable.render.text() },
             {
                 data: 'blood_group',
                 render: function (data) {
@@ -162,7 +162,7 @@ $(document).ready(function () {
                     return '<span class="badge-blood" data-blood="' + data + '">' + data + '</span>';
                 }
             },
-            { data: 'gender' },
+            { data: 'gender', render: $.fn.dataTable.render.text() },
             {
                 data: 'last_donation_date',
                 render: function (data) {

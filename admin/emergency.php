@@ -209,18 +209,30 @@ $(document).ready(function () {
                 }
 
                 setButtonLoading($btn);
+                const originalLabel = $btn.html();
+
                 // Tell the sender which mode to use; SMS ignores it.
                 const payload = $('#emergencyForm').serialize() +
                                 '&send_mode=' + (channel === 'whatsapp' ? 'template' : 'text');
-                $.post(url, payload, function (res) {
-                    setButtonLoading($btn, false);
-                    if (res.success) {
-                        showToast(res.message, 'success');
-                    } else {
-                        showToast(res.message, 'error');
+
+                // Chunked, like the Messages page. An emergency request
+                // goes to every matching donor, so it is exactly the send
+                // most likely to exceed max_execution_time - and the one
+                // where a silent partial send matters most.
+                sendCampaign(url, payload, {
+                    onProgress: function (processed, total) {
+                        $btn.html('<i class="fas fa-bullhorn me-1"></i> Sending ' + processed + ' / ' + total);
+                    },
+                    onDone: function (totals, total) {
+                        setButtonLoading($btn, false);
+                        $btn.html(originalLabel);
+                        showToast(campaignSummary(totals, total), totals.failed ? 'error' : 'success');
+                    },
+                    onError: function (msg) {
+                        setButtonLoading($btn, false);
+                        $btn.html(originalLabel);
+                        showToast(msg, 'error');
                     }
-                }, 'json').fail(function () {
-                    setButtonLoading($btn, false);
                 });
             });
     });

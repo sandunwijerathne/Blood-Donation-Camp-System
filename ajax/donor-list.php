@@ -19,8 +19,7 @@ $db = getDB();
 
 // DataTables parameters
 $draw = (int) ($_POST['draw'] ?? 1);
-$start = (int) ($_POST['start'] ?? 0);
-$length = (int) ($_POST['length'] ?? 25);
+[$start, $length] = dataTablePaging();
 $searchValue = trim($_POST['search']['value'] ?? '');
 $orderCol = (int) ($_POST['order'][0]['column'] ?? 1);
 $orderDir = ($_POST['order'][0]['dir'] ?? 'asc') === 'desc' ? 'DESC' : 'ASC';

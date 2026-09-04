@@ -140,15 +140,15 @@ $(document).ready(function () {
             }
         },
         columns: [
-            { data: 'template_name' },
-            { data: 'template_type' },
+            { data: 'template_name', render: $.fn.dataTable.render.text() },
+            { data: 'template_type', render: $.fn.dataTable.render.text() },
             {
                 data: 'template_body',
                 render: function (data) {
                     return '<span class="text-truncate-2">' + $('<span>').text(data || '').html() + '</span>';
                 }
             },
-            { data: 'created_at' },
+            { data: 'created_at', render: $.fn.dataTable.render.text() },
             {
                 data: 'id',
                 orderable: false,

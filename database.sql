@@ -169,6 +169,9 @@ CREATE TABLE IF NOT EXISTS `message_logs` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
     `donor_id` INT DEFAULT NULL,
     `staff_id` INT DEFAULT NULL,
+    -- Groups one send run together, so a retry of a part-finished
+    -- campaign resumes instead of messaging everyone a second time.
+    `campaign_id` CHAR(32) DEFAULT NULL,
     `message_type` ENUM('WhatsApp','SMS') NOT NULL,
     `mobile` VARCHAR(20) NOT NULL,
     `message` TEXT NOT NULL,
@@ -176,7 +179,8 @@ CREATE TABLE IF NOT EXISTS `message_logs` (
     `api_response` TEXT DEFAULT NULL,
     `sent_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (`donor_id`) REFERENCES `donors`(`id`) ON DELETE SET NULL,
-    FOREIGN KEY (`staff_id`) REFERENCES `staff`(`id`) ON DELETE SET NULL
+    FOREIGN KEY (`staff_id`) REFERENCES `staff`(`id`) ON DELETE SET NULL,
+    INDEX `idx_campaign` (`campaign_id`, `status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================
@@ -197,7 +201,28 @@ CREATE TABLE IF NOT EXISTS `message_templates` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================
--- 8. SETTINGS (key-value store)
+-- 8. LOGIN ATTEMPTS (brute-force throttling)
+--
+-- Every login attempt, successful or not. Failures are counted in two
+-- windows - by email and by IP - so neither one account nor one host
+-- can be ground down. Before this, login accepted unlimited attempts
+-- at full speed with no record that an attack had happened.
+--
+-- Pruned by the application; holds no donor data.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `login_attempts` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `email` VARCHAR(255) NOT NULL,
+    `ip_address` VARCHAR(45) NOT NULL,
+    `successful` TINYINT(1) NOT NULL DEFAULT 0,
+    `attempted_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX `idx_attempt_email` (`email`, `attempted_at`),
+    INDEX `idx_attempt_ip` (`ip_address`, `attempted_at`),
+    INDEX `idx_attempt_time` (`attempted_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================
+-- 9. SETTINGS (key-value store)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS `settings` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,

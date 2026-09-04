@@ -155,11 +155,37 @@ try {
             : 'No matching active donors found.');
     }
 
+    // ── Chunking ─────────────────────────────────────────────
+    // One outbound HTTP call per recipient, each up to 20 seconds, used
+    // to run in a single request. 488 donors could not finish inside
+    // max_execution_time, so the request died part-way and the operator
+    // was told nothing. The browser now walks the list a chunk at a time.
+    $campaignId = normaliseCampaignId($_POST['campaign_id'] ?? null);
+    $total      = count($recipients);
+    $offset     = max(0, (int) ($_POST['offset'] ?? 0));
+    $chunk      = sendChunkSize();
+
+    // Offsets index the ORDERED list and never shift, because already-sent
+    // recipients are skipped inside the loop rather than filtered out of
+    // the query. That keeps a resumed run aligned with the first one.
+    $slice = array_slice($recipients, $offset, $chunk);
+
     $sent = 0;
     $pending = 0;
     $failed = 0;
+    $skipped = 0;
 
-    foreach ($recipients as $person) {
+    foreach ($slice as $person) {
+        $donorId = $isStaff ? null : (int) $person['id'];
+        $staffId = $isStaff ? (int) $person['id'] : null;
+
+        // Resume rather than repeat: a retry of a part-finished campaign
+        // must not message everyone who already received it.
+        if (alreadySentInCampaign($campaignId, $donorId, $staffId)) {
+            $skipped++;
+            continue;
+        }
+
         $phone = formatPhoneForAPI($person['mobile']);
         $body = replacePlaceholders($message, [
             'name' => $person['donor_name'],
@@ -173,13 +199,14 @@ try {
         // The id means different things in the two cases, so it goes into
         // whichever column has the matching foreign key.
         logMessage(
-            $isStaff ? null : (int) $person['id'],
+            $donorId,
             'SMS',
             $phone,
             $body,
             $result['status'],
             $result['response'],
-            $isStaff ? (int) $person['id'] : null
+            $staffId,
+            $campaignId
         );
 
         if ($result['status'] === 'Sent') {
@@ -191,10 +218,24 @@ try {
         }
     }
 
-    sendJsonResponse(true, "SMS processing complete: $sent sent, $pending pending, $failed failed.", [
-        'sent' => $sent,
-        'pending' => $pending,
-        'failed' => $failed
+    $processed = $offset + count($slice);
+    $done      = $processed >= $total;
+
+    $message = $done
+        ? "SMS complete: $sent sent, $pending pending, $failed failed"
+            . ($skipped > 0 ? ", $skipped already sent" : '') . '.'
+        : "Sending... $processed of $total";
+
+    sendJsonResponse(true, $message, [
+        'sent'        => $sent,
+        'pending'     => $pending,
+        'failed'      => $failed,
+        'skipped'     => $skipped,
+        'processed'   => $processed,
+        'total'       => $total,
+        'next_offset' => $done ? null : $processed,
+        'done'        => $done,
+        'campaign_id' => $campaignId
     ]);
 } catch (PDOException $e) {
     sendJsonResponse(false, APP_DEBUG ? $e->getMessage() : 'Database error. Please try again.', [], 500);

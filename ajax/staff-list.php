@@ -18,9 +18,7 @@ if (!isLoggedIn()) {
 $db = getDB();
 
 $draw = (int) ($_POST['draw'] ?? 1);
-$start = max(0, (int) ($_POST['start'] ?? 0));
-$length = (int) ($_POST['length'] ?? 25);
-$length = $length > 0 ? min($length, 100) : 25;
+[$start, $length] = dataTablePaging();
 $searchValue = trim($_POST['search']['value'] ?? '');
 $orderCol = (int) ($_POST['order'][0]['column'] ?? 0);
 $orderDir = ($_POST['order'][0]['dir'] ?? 'asc') === 'desc' ? 'DESC' : 'ASC';

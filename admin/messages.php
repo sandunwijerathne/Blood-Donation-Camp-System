@@ -339,10 +339,10 @@ $(document).ready(function () {
             }
         },
         columns: [
-            { data: 'sent_at' },
-            { data: 'donor_name' },
-            { data: 'message_type' },
-            { data: 'mobile' },
+            { data: 'sent_at', render: $.fn.dataTable.render.text() },
+            { data: 'donor_name', render: $.fn.dataTable.render.text() },
+            { data: 'message_type', render: $.fn.dataTable.render.text() },
+            { data: 'mobile', render: $.fn.dataTable.render.text() },
             {
                 data: 'message',
                 render: function (data) {
@@ -390,17 +390,25 @@ $(document).ready(function () {
         }
 
         setButtonLoading($btn);
+        const originalLabel = $btn.html();
 
-        $.post(url, $(this).serialize(), function (res) {
-            setButtonLoading($btn, false);
-            if (res.success) {
-                showToast(res.message, 'success');
+        // Chunked: a 488-donor send cannot complete in one request.
+        sendCampaign(url, $(this).serialize(), {
+            onProgress: function (processed, total) {
+                $btn.html('<i class="fas fa-paper-plane me-1"></i> Sending ' + processed + ' / ' + total);
+            },
+            onDone: function (totals, total) {
+                setButtonLoading($btn, false);
+                $btn.html(originalLabel);
+                showToast(campaignSummary(totals, total), totals.failed ? 'error' : 'success');
                 logTable.ajax.reload(null, false);
-            } else {
-                showToast(res.message, 'error');
+            },
+            onError: function (msg) {
+                setButtonLoading($btn, false);
+                $btn.html(originalLabel);
+                showToast(msg, 'error');
+                logTable.ajax.reload(null, false);
             }
-        }, 'json').fail(function () {
-            setButtonLoading($btn, false);
         });
     });
 

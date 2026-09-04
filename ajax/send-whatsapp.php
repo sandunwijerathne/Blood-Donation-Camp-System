@@ -224,12 +224,31 @@ try {
             : 'No matching active donors found.');
     }
 
+    // Chunked for the same reason as the SMS sender: one outbound call
+    // per recipient cannot finish inside max_execution_time for a list
+    // this size. See migration-campaign-batching.sql.
+    $campaignId = normaliseCampaignId($_POST['campaign_id'] ?? null);
+    $total      = count($recipients);
+    $offset     = max(0, (int) ($_POST['offset'] ?? 0));
+    $chunk      = sendChunkSize();
+    $slice      = array_slice($recipients, $offset, $chunk);
+
     $sent = 0;
     $pending = 0;
     $failed = 0;
+    $skipped = 0;
     $firstError = '';
 
-    foreach ($recipients as $donor) {
+    foreach ($slice as $donor) {
+        $donorId = $isStaff ? null : (int) $donor['id'];
+        $staffId = $isStaff ? (int) $donor['id'] : null;
+
+        // Resume rather than repeat on a retry.
+        if (alreadySentInCampaign($campaignId, $donorId, $staffId)) {
+            $skipped++;
+            continue;
+        }
+
         $mobile = $donor['whatsapp'] ?: $donor['mobile'];
         $phone  = formatPhoneForAPI($mobile);
 
@@ -264,13 +283,14 @@ try {
 
         $result = sendWhatsAppPayload($payload);
         logMessage(
-            $isStaff ? null : (int) $donor['id'],
+            $donorId,
             'WhatsApp',
             $phone,
             $logBody,
             $result['status'],
             $result['response'],
-            $isStaff ? (int) $donor['id'] : null
+            $staffId,
+            $campaignId
         );
 
         if ($result['status'] === 'Sent') {
@@ -285,10 +305,16 @@ try {
         }
     }
 
-    $summary = "WhatsApp processing complete: $sent sent, $pending pending, $failed failed.";
+    $processed = $offset + count($slice);
+    $done      = $processed >= $total;
+
+    $summary = $done
+        ? "WhatsApp complete: $sent sent, $pending pending, $failed failed"
+            . ($skipped > 0 ? ", $skipped already sent" : '') . '.'
+        : "Sending... $processed of $total";
 
     // Surface the most common setup mistakes instead of a bare count.
-    if ($failed > 0 && $firstError !== '') {
+    if ($done && $failed > 0 && $firstError !== '') {
         if (stripos($firstError, 'template') !== false && stripos($firstError, 'not exist') !== false) {
             $summary .= ' The template name or language does not match an approved template in WhatsApp Manager.';
         } elseif (stripos($firstError, '24') !== false || stripos($firstError, 're-engagement') !== false) {
@@ -299,10 +325,16 @@ try {
     }
 
     sendJsonResponse(true, $summary, [
-        'sent'      => $sent,
-        'pending'   => $pending,
-        'failed'    => $failed,
-        'send_mode' => $sendMode
+        'sent'        => $sent,
+        'pending'     => $pending,
+        'failed'      => $failed,
+        'skipped'     => $skipped,
+        'processed'   => $processed,
+        'total'       => $total,
+        'next_offset' => $done ? null : $processed,
+        'done'        => $done,
+        'campaign_id' => $campaignId,
+        'send_mode'   => $sendMode
     ]);
 } catch (PDOException $e) {
     sendJsonResponse(false, APP_DEBUG ? $e->getMessage() : 'Database error. Please try again.', [], 500);

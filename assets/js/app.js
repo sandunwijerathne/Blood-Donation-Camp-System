@@ -222,3 +222,88 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 });
+
+// ── Chunked campaign sending ─────────────────────────────────
+//
+// Sending used to be one request that looped every recipient, each with
+// an outbound API call. At 488 donors that cannot finish inside PHP's
+// max_execution_time: the request died part-way, some donors got the
+// message, some did not, and the operator saw no summary at all.
+//
+// The browser now walks the list a chunk at a time. Every run carries a
+// campaign id, so a chunk that fails can be retried without re-sending
+// to everyone already contacted.
+
+/**
+ * A campaign id: 32 hex characters, matching what the server accepts.
+ */
+function newCampaignId() {
+    const bytes = new Uint8Array(16);
+    (window.crypto || window.msCrypto).getRandomValues(bytes);
+    return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Post a campaign in chunks until the server reports it is finished.
+ *
+ * @param {string}   url        send-sms.php or send-whatsapp.php
+ * @param {string}   formData   serialized form, without offset/campaign_id
+ * @param {object}   handlers   { onProgress, onDone, onError }
+ */
+function sendCampaign(url, formData, handlers) {
+    handlers = handlers || {};
+
+    const campaignId = newCampaignId();
+    const totals = { sent: 0, pending: 0, failed: 0, skipped: 0 };
+
+    function step(offset) {
+        const payload = formData
+            + '&campaign_id=' + encodeURIComponent(campaignId)
+            + '&offset=' + offset;
+
+        $.post(url, payload, function (res) {
+            if (!res.success) {
+                if (handlers.onError) handlers.onError(res.message, totals);
+                return;
+            }
+
+            const d = res.data || {};
+            totals.sent    += d.sent    || 0;
+            totals.pending += d.pending || 0;
+            totals.failed  += d.failed  || 0;
+            totals.skipped += d.skipped || 0;
+
+            if (handlers.onProgress) {
+                handlers.onProgress(d.processed || 0, d.total || 0, totals);
+            }
+
+            if (d.done || d.next_offset === null || d.next_offset === undefined) {
+                if (handlers.onDone) handlers.onDone(totals, d.total || 0, campaignId);
+                return;
+            }
+
+            step(d.next_offset);
+        }, 'json').fail(function (xhr) {
+            // A chunk failing is recoverable: everything already sent is
+            // recorded under this campaign id, so retrying resumes rather
+            // than starting over. Tell the operator where it stopped.
+            const msg = 'Sending stopped at recipient ' + offset +
+                '. Nothing already sent will be sent twice if you try again.' +
+                (xhr && xhr.status ? ' (HTTP ' + xhr.status + ')' : '');
+            if (handlers.onError) handlers.onError(msg, totals);
+        });
+    }
+
+    step(0);
+}
+
+/**
+ * Human summary of a finished campaign.
+ */
+function campaignSummary(totals, total) {
+    const parts = [totals.sent + ' sent'];
+    if (totals.failed)  parts.push(totals.failed + ' failed');
+    if (totals.pending) parts.push(totals.pending + ' pending');
+    if (totals.skipped) parts.push(totals.skipped + ' already sent');
+    return parts.join(', ') + ' of ' + total + '.';
+}

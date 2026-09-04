@@ -280,15 +280,74 @@ function replacePlaceholders(string $template, array $data): string
  * pass null there and give the id as $staffId instead. Both being null is
  * valid too: that is a message to a recipient who has since been deleted.
  */
-function logMessage(?int $donorId, string $type, string $mobile, string $message, string $status, string $apiResponse = '', ?int $staffId = null): int
+function logMessage(?int $donorId, string $type, string $mobile, string $message, string $status, string $apiResponse = '', ?int $staffId = null, ?string $campaignId = null): int
 {
     $db = getDB();
     $stmt = $db->prepare(
-        "INSERT INTO message_logs (donor_id, staff_id, message_type, mobile, message, status, api_response, sent_at) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, NOW())"
+        "INSERT INTO message_logs (donor_id, staff_id, campaign_id, message_type, mobile, message, status, api_response, sent_at) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())"
     );
-    $stmt->execute([$donorId ?: null, $staffId ?: null, $type, $mobile, $message, $status, $apiResponse]);
+    $stmt->execute([$donorId ?: null, $staffId ?: null, $campaignId ?: null, $type, $mobile, $message, $status, $apiResponse]);
     return (int) $db->lastInsertId();
+}
+
+/**
+ * Has this recipient already been sent to successfully in this campaign?
+ *
+ * Sending happens in chunks, and a chunk can fail or be retried. Without
+ * this check a retry re-sends to everyone already contacted - which on a
+ * 488-donor list means 488 duplicate messages and a duplicated bill.
+ */
+function alreadySentInCampaign(?string $campaignId, ?int $donorId, ?int $staffId): bool
+{
+    if ($campaignId === null || $campaignId === '') {
+        return false;
+    }
+
+    $db = getDB();
+
+    if ($staffId !== null) {
+        $stmt = $db->prepare(
+            "SELECT 1 FROM message_logs
+             WHERE campaign_id = ? AND staff_id = ? AND status = 'Sent' LIMIT 1"
+        );
+        $stmt->execute([$campaignId, $staffId]);
+    } else {
+        $stmt = $db->prepare(
+            "SELECT 1 FROM message_logs
+             WHERE campaign_id = ? AND donor_id = ? AND status = 'Sent' LIMIT 1"
+        );
+        $stmt->execute([$campaignId, $donorId]);
+    }
+
+    return (bool) $stmt->fetchColumn();
+}
+
+/**
+ * Validate a campaign id supplied by the browser.
+ *
+ * It only ever groups rows together, but it still reaches SQL, so it is
+ * constrained to the shape the client is meant to generate.
+ */
+function normaliseCampaignId(?string $raw): ?string
+{
+    $raw = trim((string) $raw);
+
+    return preg_match('/^[a-f0-9]{32}$/', $raw) ? $raw : null;
+}
+
+/**
+ * How many recipients one request may process.
+ *
+ * Each recipient costs one outbound HTTP call, so the chunk size has to
+ * leave room under max_execution_time for the slowest plausible call.
+ */
+function sendChunkSize(): int
+{
+    $requested = (int) ($_POST['chunk'] ?? 0);
+    $default   = 40;
+
+    return $requested > 0 ? min($requested, 100) : $default;
 }
 
 /**
@@ -563,4 +622,127 @@ function sendNotifySms(string $phone, string $message, string $userId, string $a
     }
 
     return ['ok' => $ok, 'http' => $httpCode, 'body' => (string) $response, 'error' => $error];
+}
+
+/**
+ * Read DataTables' paging parameters safely.
+ *
+ * DataTables sends length = -1 for "show all". Interpolated straight
+ * into "LIMIT -1" that is a SQL syntax error; a large positive value is
+ * worse, loading every row into memory. Two of the seven list endpoints
+ * clamped this and five did not, which is what having the rule in seven
+ * places produces - so it lives here now.
+ *
+ * "All" is mapped to $maxLength rather than the default, so the control
+ * still does something useful instead of silently showing 25 rows.
+ *
+ * Returns [$start, $length], both safe to interpolate.
+ */
+function dataTablePaging(int $maxLength = 100, int $default = 25): array
+{
+    $start  = max(0, (int) ($_POST['start'] ?? 0));
+    $length = (int) ($_POST['length'] ?? $default);
+    $length = $length <= 0 ? $maxLength : min($length, $maxLength);
+
+    return [$start, $length];
+}
+
+// ── Login throttling ─────────────────────────────────────────
+// Tuned for a system with a handful of legitimate operators. A real
+// person mistypes a password two or three times; five failures in
+// fifteen minutes is not a person remembering.
+const LOGIN_MAX_PER_EMAIL   = 5;
+const LOGIN_MAX_PER_IP      = 20;
+const LOGIN_WINDOW_SECONDS  = 900;   // 15 minutes
+const LOGIN_ATTEMPT_RETAIN  = 86400; // prune records after a day
+
+/**
+ * The client's IP address.
+ *
+ * Proxy headers are deliberately NOT trusted: X-Forwarded-For is
+ * attacker-controlled unless a known proxy sets it, and trusting it
+ * would let anyone reset their own rate limit by forging a header.
+ * Behind a real reverse proxy, resolve the trusted address there.
+ */
+function clientIp(): string
+{
+    $ip = $_SERVER['REMOTE_ADDR'] ?? '';
+    return filter_var($ip, FILTER_VALIDATE_IP) ? $ip : '0.0.0.0';
+}
+
+/**
+ * Record one login attempt, successful or not.
+ */
+function recordLoginAttempt(string $email, bool $successful): void
+{
+    $db = getDB();
+
+    $stmt = $db->prepare(
+        "INSERT INTO login_attempts (email, ip_address, successful) VALUES (?, ?, ?)"
+    );
+    $stmt->execute([mb_substr($email, 0, 255), clientIp(), $successful ? 1 : 0]);
+
+    // A successful login clears that account's failures, so someone who
+    // finally remembers their password is not still locked out.
+    if ($successful) {
+        $stmt = $db->prepare(
+            "DELETE FROM login_attempts WHERE email = ? AND successful = 0"
+        );
+        $stmt->execute([$email]);
+    }
+
+    // Opportunistic pruning - roughly one request in twenty - so the
+    // table cannot grow without bound and no cron job is required.
+    if (random_int(1, 20) === 1) {
+        $db->prepare("DELETE FROM login_attempts WHERE attempted_at < (NOW() - INTERVAL ? SECOND)")
+           ->execute([LOGIN_ATTEMPT_RETAIN]);
+    }
+}
+
+/**
+ * How many seconds this login attempt must wait, or 0 if it may proceed.
+ *
+ * Counting is done over a sliding window from the OLDEST failure still
+ * in scope, so an attacker cannot reset the clock by pausing.
+ */
+function loginLockoutSeconds(string $email): int
+{
+    $db = getDB();
+    $wait = 0;
+
+    foreach ([['email', $email, LOGIN_MAX_PER_EMAIL],
+              ['ip_address', clientIp(), LOGIN_MAX_PER_IP]] as [$column, $value, $limit]) {
+
+        $stmt = $db->prepare(
+            "SELECT COUNT(*) AS failures, MIN(attempted_at) AS first_failure
+             FROM login_attempts
+             WHERE $column = ? AND successful = 0
+               AND attempted_at > (NOW() - INTERVAL ? SECOND)"
+        );
+        // $column is one of two literals above, never user input.
+        $stmt->execute([$value, LOGIN_WINDOW_SECONDS]);
+        $row = $stmt->fetch();
+
+        if ((int) ($row['failures'] ?? 0) >= $limit) {
+            $elapsed = time() - strtotime((string) $row['first_failure']);
+            $wait = max($wait, LOGIN_WINDOW_SECONDS - $elapsed);
+        }
+    }
+
+    return max(0, $wait);
+}
+
+/**
+ * "4 minutes" rather than "223 seconds" - a lockout message is read by
+ * someone who has just mistyped their password, not by a machine.
+ */
+function humaniseSeconds(int $seconds): string
+{
+    if ($seconds < 60) {
+        return $seconds . ' second' . ($seconds === 1 ? '' : 's');
+    }
+
+    $minutes = (int) ceil($seconds / 60);
+
+    return $minutes . ' minute' . ($minutes === 1 ? '' : 's');
 }

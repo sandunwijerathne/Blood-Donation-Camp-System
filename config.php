@@ -103,7 +103,15 @@ define('BASE_URL', $protocol . '://' . $host . $basePath);
 // ── Paths ────────────────────────────────────────────────────
 define('ROOT_PATH', __DIR__);
 define('INCLUDES_PATH', ROOT_PATH . '/includes');
-define('UPLOAD_PATH', ROOT_PATH . '/uploads');
+// Uploads default to storage/, which .htaccess denies, rather than the
+// old ROOT_PATH/uploads which was publicly reachable. On a production
+// host, set APP_UPLOAD_PATH in config.local.php to a directory OUTSIDE
+// the document root - that protects the files even if .htaccess is not
+// honoured, which is the case on nginx.
+if (!defined('APP_UPLOAD_PATH')) {
+    define('APP_UPLOAD_PATH', ROOT_PATH . '/storage/uploads');
+}
+define('UPLOAD_PATH', APP_UPLOAD_PATH);
 define('EXCEL_UPLOAD_PATH', UPLOAD_PATH . '/excel');
 
 // ── Session Configuration ────────────────────────────────────

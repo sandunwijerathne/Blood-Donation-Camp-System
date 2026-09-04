@@ -152,7 +152,7 @@ $(document).ready(function () {
             }
         },
         columns: [
-            { data: 'title' },
+            { data: 'title', render: $.fn.dataTable.render.text() },
             {
                 data: 'camp_date',
                 render: function (data) {

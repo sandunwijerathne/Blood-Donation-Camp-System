@@ -37,13 +37,33 @@ if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
 
 try {
     $db = getDB();
+
+    // Throttle BEFORE touching the password. Unlimited attempts at full
+    // speed, unlogged, was the previous behaviour - one script away from
+    // guessing the only account guarding 488 people's health records.
+    $wait = loginLockoutSeconds($email);
+    if ($wait > 0) {
+        // Deliberately does not say whether the account exists, so the
+        // lockout cannot be used to enumerate accounts either.
+        sendJsonResponse(false, sprintf(
+            'Too many failed attempts. Try again in %s.',
+            humaniseSeconds($wait)
+        ), [], 429);
+    }
+
     $stmt = $db->prepare("SELECT id, name, email, password FROM admins WHERE email = ? LIMIT 1");
     $stmt->execute([$email]);
     $admin = $stmt->fetch();
 
     if (!$admin || !password_verify($password, $admin['password'])) {
+        recordLoginAttempt($email, false);
+
+        // Same wording for "no such account" and "wrong password", so a
+        // failed login still reveals nothing about who has an account.
         sendJsonResponse(false, 'Invalid email or password.');
     }
+
+    recordLoginAttempt($email, true);
 
     // Regenerate session ID to prevent session fixation
     session_regenerate_id(true);
