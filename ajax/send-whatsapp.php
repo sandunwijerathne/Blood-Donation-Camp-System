@@ -7,6 +7,7 @@ require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/messaging.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -119,49 +120,16 @@ function buildTemplatePayload(
 }
 
 /**
- * Send one WhatsApp message.
- *
- * $payload is either a template payload (business-initiated, works any
- * time) or a plain text payload (only delivered inside the 24-hour
- * window opened by the donor messaging first).
+ * Adapt the shared WhatsApp sender to the send loop's shape.
  */
 function sendWhatsAppPayload(array $payload): array
 {
-    $token = getSetting('whatsapp_api_token');
-    $phoneNumberId = getSetting('whatsapp_phone_number_id');
-    $version = getSetting('whatsapp_api_version', 'v23.0');
+    $result = whatsAppSend($payload);
 
-    if ($token === '' || $phoneNumberId === '') {
-        return ['status' => 'Pending', 'response' => 'WhatsApp API credentials are not configured.'];
-    }
-
-    if (!function_exists('curl_init')) {
-        return ['status' => 'Failed', 'response' => 'PHP cURL extension is not enabled.'];
-    }
-
-    $url = "https://graph.facebook.com/$version/$phoneNumberId/messages";
-
-    $ch = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_POST => true,
-        CURLOPT_HTTPHEADER => [
-            'Authorization: Bearer ' . $token,
-            'Content-Type: application/json'
-        ],
-        CURLOPT_POSTFIELDS => json_encode($payload),
-        CURLOPT_TIMEOUT => 20
-    ]);
-    $response = curl_exec($ch);
-    $error = curl_error($ch);
-    $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-
-    if ($response === false || $httpCode >= 400) {
-        return ['status' => 'Failed', 'response' => $error ?: (string) $response];
-    }
-
-    return ['status' => 'Sent', 'response' => (string) $response];
+    return [
+        'status'   => $result['status'],
+        'response' => $result['raw'] !== '' ? $result['raw'] : $result['detail'],
+    ];
 }
 
 $recipientType = trim($_POST['recipient_type'] ?? 'all');

@@ -57,78 +57,22 @@ function smsDonorQuery(string $recipientType, string $bloodGroup, array $donorId
 }
 
 /**
- * Active organising-committee members.
+ * Adapt the shared sender to what the send loop and message log expect.
  *
- * Columns are aliased to match smsDonorQuery() so the send loop below does
- * not have to care which of the two lists it is walking. Staff have no
- * blood group; the placeholder resolves to an empty string for them.
+ * The gateway logic itself lives in includes/messaging.php so that real
+ * sends and the Settings test cannot drift apart.
  */
-function smsStaffQuery(): array
-{
-    return getDB()->query(
-        "SELECT id, name AS donor_name, mobile, NULL AS blood_group
-         FROM staff
-         WHERE status = 'Active'
-         ORDER BY name"
-    )->fetchAll();
-}
-
 function sendSmsText(string $phone, string $message): array
 {
-    $gateway = strtolower(getSetting('sms_gateway', 'twilio'));
-    $apiKey = getSetting('sms_api_key');
-    $apiSecret = getSetting('sms_api_secret');
-    $senderId = getSetting('sms_sender_id');
+    $result = smsSend($phone, $message);
 
-    if ($apiKey === '' || $apiSecret === '' || $senderId === '') {
-        return ['status' => 'Pending', 'response' => 'SMS gateway credentials are not configured.'];
-    }
-
-    if (!function_exists('curl_init')) {
-        return ['status' => 'Failed', 'response' => 'PHP cURL extension is not enabled.'];
-    }
-
-    if ($gateway === 'notify') {
-        $result = sendNotifySms($phone, $message, $apiKey, $apiSecret, $senderId);
-
-        return [
-            'status' => $result['ok'] ? 'Sent' : 'Failed',
-            // Prefer Notify's raw body: it carries the reason a send was
-            // rejected, which is what makes a failed camp blast diagnosable
-            // from the message log weeks later.
-            'response' => $result['body'] !== '' ? $result['body'] : $result['error'],
-        ];
-    }
-
-    if ($gateway !== 'twilio') {
-        return ['status' => 'Pending', 'response' => ucfirst($gateway) . ' gateway credentials saved; provider-specific endpoint not configured yet.'];
-    }
-
-    $url = "https://api.twilio.com/2010-04-01/Accounts/$apiKey/Messages.json";
-    $payload = http_build_query([
-        'From' => $senderId,
-        'To' => $phone,
-        'Body' => $message
-    ]);
-
-    $ch = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_POST => true,
-        CURLOPT_USERPWD => $apiKey . ':' . $apiSecret,
-        CURLOPT_POSTFIELDS => $payload,
-        CURLOPT_TIMEOUT => 20
-    ]);
-    $response = curl_exec($ch);
-    $error = curl_error($ch);
-    $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-
-    if ($response === false || $httpCode >= 400) {
-        return ['status' => 'Failed', 'response' => $error ?: (string) $response];
-    }
-
-    return ['status' => 'Sent', 'response' => (string) $response];
+    return [
+        'status' => $result['status'],
+        // Prefer the provider's raw body: it carries the reason a send
+        // was rejected, which is what makes a failed camp blast
+        // diagnosable from the message log weeks later.
+        'response' => $result['raw'] !== '' ? $result['raw'] : $result['detail'],
+    ];
 }
 
 $recipientType = trim($_POST['recipient_type'] ?? 'all');

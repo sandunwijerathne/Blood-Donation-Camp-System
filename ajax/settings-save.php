@@ -7,6 +7,7 @@ require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/messaging.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -24,27 +25,13 @@ if (!validateCSRF()) {
 
 function testWhatsAppMessage(string $phone, string $message, string $templateName = 'hello_world', string $language = 'en_US'): array
 {
-    $token = getSetting('whatsapp_api_token');
-    $phoneNumberId = getSetting('whatsapp_phone_number_id');
-    $version = getSetting('whatsapp_api_version', 'v23.0');
-
-    if ($token === '' || $phoneNumberId === '') {
-        return ['success' => false, 'message' => 'WhatsApp API credentials are not configured.'];
-    }
-
-    if (!function_exists('curl_init')) {
-        return ['success' => false, 'message' => 'PHP cURL extension is not enabled.'];
-    }
-
-    $url = "https://graph.facebook.com/$version/$phoneNumberId/messages";
-
     // Use the "hello_world" template that Meta pre-approves on new accounts.
     // A plain text message only arrives if the tester messaged this number in the
     // last 24 hours, so a template proves the token, Phone Number ID and API
     // version are all correct by themselves. Once a business registers its own
     // number Meta rejects "hello_world" (error 131058); businesses must use their
     // own approved templates.
-    $payload = [
+    $result = whatsAppSend([
         'messaging_product' => 'whatsapp',
         'to'                => ltrim($phone, '+'),
         'type'              => 'template',
@@ -52,122 +39,27 @@ function testWhatsAppMessage(string $phone, string $message, string $templateNam
             'name'     => $templateName !== '' ? $templateName : 'hello_world',
             'language' => ['code' => $language !== '' ? $language : 'en_US']
         ]
-    ];
-
-    $ch = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_POST => true,
-        CURLOPT_HTTPHEADER => [
-            'Authorization: Bearer ' . $token,
-            'Content-Type: application/json'
-        ],
-        CURLOPT_POSTFIELDS => json_encode($payload),
-        CURLOPT_TIMEOUT => 20
     ]);
-    $response = curl_exec($ch);
-    $error = curl_error($ch);
-    $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
 
-    if ($response === false || $httpCode >= 400) {
-        $detail = $error ?: (string) $response;
-
-        if (stripos($detail, '131058') !== false || stripos($detail, 'Public Test Numbers') !== false) {
-            // The account has moved off Meta's shared test number.
-            $detail = 'Your own number is registered, so the "hello_world" template no longer works'
-                    . ' - Meta only allows it from their public test numbers. Create a template in'
-                    . ' WhatsApp Manager, wait for approval, then pick it in the WhatsApp Test'
-                    . ' Template box above. Your token and Phone Number ID are fine: this error'
-                    . ' only happens after authentication succeeds.';
-        } elseif (stripos($detail, 'not exist') !== false && stripos($detail, 'template') !== false) {
-            $detail .= ' - no approved template with that name and language. Check WhatsApp Manager'
-                     . ' -> Message Templates, and that the language code matches exactly.'
-                     . ' Also confirm the Phone Number ID belongs to this WhatsApp Business Account.';
-        } elseif (stripos($detail, 'payment') !== false || stripos($detail, '131042') !== false) {
-            $detail .= ' - add a payment method to the WhatsApp Business Account. Business-initiated'
-                     . ' messages cannot be sent without one.';
-        } elseif ($httpCode === 401 || stripos($detail, 'access token') !== false) {
-            $detail .= ' - the access token is invalid or has expired. Temporary tokens last 24 hours.';
-        } elseif (stripos($detail, 'recipient') !== false) {
-            $detail .= ' - add this number to the allowed recipient list on the WhatsApp > API Setup page first.';
-        }
-
-        return ['success' => false, 'message' => 'WhatsApp test failed: ' . $detail];
+    if ($result['ok']) {
+        return ['success' => true, 'message' => 'WhatsApp test message sent (' . $templateName . ' template).'];
     }
 
-    return ['success' => true, 'message' => 'WhatsApp test message sent (hello_world template).'];
+    return ['success' => false, 'message' => 'WhatsApp test failed: ' . whatsAppSetupHint($result)];
 }
 
 function testSmsMessage(string $phone, string $message): array
 {
-    $gateway = strtolower(getSetting('sms_gateway', 'twilio'));
-    $apiKey = getSetting('sms_api_key');
-    $apiSecret = getSetting('sms_api_secret');
-    $senderId = getSetting('sms_sender_id');
+    // Same sender as a real send, so a passing test means real sends work -
+    // which was not guaranteed while the two kept separate copies of the
+    // gateway code.
+    $result = smsSend($phone, $message);
 
-    if ($apiKey === '' || $apiSecret === '' || $senderId === '') {
-        return ['success' => false, 'message' => 'SMS gateway credentials are not configured.'];
+    if ($result['ok']) {
+        return ['success' => true, 'message' => 'SMS test message sent via ' . ucfirst($result['gateway']) . '.'];
     }
 
-    if (!function_exists('curl_init')) {
-        return ['success' => false, 'message' => 'PHP cURL extension is not enabled.'];
-    }
-
-    if ($gateway === 'notify') {
-        $result = sendNotifySms($phone, $message, $apiKey, $apiSecret, $senderId);
-
-        if ($result['ok']) {
-            return ['success' => true, 'message' => 'SMS test message sent via Notify.lk.'];
-        }
-
-        // Notify's own wording is terse, so name the fix for the mistakes
-        // that actually happen during first-time setup.
-        $detail = $result['error'];
-        if (stripos($detail, 'sender') !== false) {
-            $detail .= ' - the Sender ID must be a name Notify has approved for your account. Use NotifyDEMO until yours is approved.';
-        } elseif (stripos($detail, 'balance') !== false || stripos($detail, 'credit') !== false) {
-            $detail .= ' - the Notify.lk account is out of credit.';
-        } elseif ($result['http'] === 401
-            || stripos($detail, 'unauthor') !== false
-            || stripos($detail, 'invalid') !== false
-            || stripos($detail, 'api key') !== false
-            || stripos($detail, 'user id') !== false) {
-            $detail .= ' - check the User ID and API Key against your Notify.lk settings page.';
-        }
-
-        return ['success' => false, 'message' => 'SMS test failed: ' . $detail];
-    }
-
-    if ($gateway !== 'twilio') {
-        return ['success' => false, 'message' => ucfirst($gateway) . ' test sending is not wired yet. Credentials were saved for provider setup.'];
-    }
-
-    $url = "https://api.twilio.com/2010-04-01/Accounts/$apiKey/Messages.json";
-    $payload = http_build_query([
-        'From' => $senderId,
-        'To' => $phone,
-        'Body' => $message
-    ]);
-
-    $ch = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_POST => true,
-        CURLOPT_USERPWD => $apiKey . ':' . $apiSecret,
-        CURLOPT_POSTFIELDS => $payload,
-        CURLOPT_TIMEOUT => 20
-    ]);
-    $response = curl_exec($ch);
-    $error = curl_error($ch);
-    $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-
-    if ($response === false || $httpCode >= 400) {
-        return ['success' => false, 'message' => 'SMS test failed: ' . ($error ?: (string) $response)];
-    }
-
-    return ['success' => true, 'message' => 'SMS test message sent.'];
+    return ['success' => false, 'message' => 'SMS test failed: ' . smsSetupHint($result)];
 }
 
 $action = trim($_POST['action'] ?? 'save');
