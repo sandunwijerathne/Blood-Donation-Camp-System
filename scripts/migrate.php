@@ -67,7 +67,7 @@ $changed = [];
 
 foreach ($files as $path) {
     $name = basename($path);
-    $sum  = hash_file('sha256', $path);
+    $sum  = migrationChecksum($path);
 
     if (!isset($applied[$name])) {
         $pending[$name] = $path;
@@ -79,6 +79,28 @@ foreach ($files as $path) {
 }
 
 $orphans = array_diff(array_keys($applied), array_map('basename', $files));
+
+/**
+ * Checksum of a migration's CONTENT, independent of line endings.
+ *
+ * hash_file() over raw bytes is not stable here: git normalises line
+ * endings on checkout, so the same file is LF in the repository and
+ * CRLF in a Windows working copy. Hashing raw bytes made a migration
+ * report itself as "edited" straight after being committed - a false
+ * alarm, and a checker that cries wolf is one nobody reads.
+ *
+ * Normalising CRLF and lone CR to LF keeps the checksum meaningful: it
+ * still catches a real content edit and ignores one a text editor made.
+ */
+function migrationChecksum(string $path): string
+{
+    $content = (string) file_get_contents($path);
+    // \R matches CRLF, CR or LF - written as a regex so the
+    // pattern itself cannot be mangled by line-ending conversion.
+    $content = preg_replace('/\R/u', "\n", $content);
+
+    return hash('sha256', $content);
+}
 
 /**
  * Apply one migration file through the mysql client.
@@ -163,7 +185,7 @@ switch ($command) {
             "INSERT INTO schema_migrations (filename, checksum, method) VALUES (?, ?, 'baseline')"
         );
         foreach ($pending as $name => $path) {
-            $stmt->execute([$name, hash_file('sha256', $path)]);
+            $stmt->execute([$name, migrationChecksum($path)]);
             echo "  recorded $name\n";
         }
         printf("\n%d migration(s) baselined.\n", count($pending));
@@ -196,12 +218,50 @@ switch ($command) {
                 exit(1);
             }
 
-            $stmt->execute([$name, hash_file('sha256', $path)]);
+            $stmt->execute([$name, migrationChecksum($path)]);
             echo "ok\n";
         }
 
         printf("\n%d migration(s) applied.\n", count($pending));
         exit(0);
+
+    case 'rehash':
+        // One-time repair after the checksum method changed, or after a
+        // deliberate reformat. Records the CURRENT content as correct, so
+        // it silences the change detector - only run it when you already
+        // know the files are right.
+        if (!$changed) {
+            echo "Nothing to rehash - every checksum already matches.
+";
+            exit(0);
+        }
+
+        echo "These recorded checksums will be replaced with the current content:
+";
+        foreach ($changed as $name => $_) echo "  $name
+";
+        echo "
+Only do this if you know the current files are correct.
+";
+        echo "Type 'rehash' to confirm: ";
+
+        if (trim((string) fgets(STDIN)) !== 'rehash') {
+            echo "Aborted.
+";
+            exit(1);
+        }
+
+        $stmt = $db->prepare("UPDATE schema_migrations SET checksum = ? WHERE filename = ?");
+        foreach ($changed as $name => $path) {
+            $stmt->execute([migrationChecksum($path), $name]);
+            echo "  rehashed $name
+";
+        }
+        printf("
+%d checksum(s) updated.
+", count($changed));
+        exit(0);
+
 
     default:
         fwrite(STDERR, "Unknown command '$command'. Use: status | baseline | migrate\n");
