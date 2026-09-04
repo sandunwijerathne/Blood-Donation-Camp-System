@@ -15,6 +15,14 @@ if (!isLoggedIn()) {
     exit;
 }
 
+// Every caller of this endpoint already sends the token (DataTables adds
+// it via d.csrf_token), so requiring it costs nothing and removes the
+// inconsistency of some endpoints checking and others not.
+if (!validateCSRF()) {
+    echo json_encode(['error' => 'Invalid security token. Please reload the page.']);
+    exit;
+}
+
 $db = getDB();
 
 $draw = (int) ($_POST['draw'] ?? 1);

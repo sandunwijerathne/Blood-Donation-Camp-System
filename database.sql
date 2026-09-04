@@ -222,7 +222,28 @@ CREATE TABLE IF NOT EXISTS `login_attempts` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================
--- 9. SETTINGS (key-value store)
+-- 9. SCHEMA MIGRATIONS (ledger)
+--
+-- Records which migration-*.sql files have been applied, so that
+-- "which schema version is this database?" has a readable answer.
+-- Restoring an unlabelled dump silently rolled this schema backwards
+-- twice; the only symptom was a page going blank.
+--
+-- Managed by scripts/migrate.php. On a FRESH install every migration
+-- is already contained in this file, so run:
+--   php scripts/migrate.php baseline
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `schema_migrations` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `filename` VARCHAR(255) NOT NULL UNIQUE,
+    `checksum` CHAR(64) NOT NULL,
+    `applied_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `method` ENUM('applied','baseline') NOT NULL DEFAULT 'applied',
+    INDEX `idx_migration_applied` (`applied_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================
+-- 10. SETTINGS (key-value store)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS `settings` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,

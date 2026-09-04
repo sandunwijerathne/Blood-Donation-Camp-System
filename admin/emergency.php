@@ -7,11 +7,26 @@ $pageTitle = 'Emergency';
 require_once __DIR__ . '/../includes/header.php';
 
 $db = getDB();
-$counts = [];
-foreach (['A+','A-','B+','B-','AB+','AB-','O+','O-'] as $group) {
-    $stmt = $db->prepare("SELECT COUNT(*) FROM donors WHERE status = 'Active' AND blood_group = ?");
-    $stmt->execute([$group]);
-    $counts[$group] = (int) $stmt->fetchColumn();
+// One grouped query instead of eight separate round trips.
+//
+// Seeded first because GROUP BY omits groups with no active donors,
+// and the page below expects an entry for every one of the eight - a
+// missing key would render as a blank tile rather than a zero.
+$counts = array_fill_keys(['A+','A-','B+','B-','AB+','AB-','O+','O-'], 0);
+
+$rows = $db->query(
+    "SELECT blood_group, COUNT(*) AS n
+     FROM donors
+     WHERE status = 'Active' AND blood_group IS NOT NULL AND blood_group <> ''
+     GROUP BY blood_group"
+)->fetchAll();
+
+foreach ($rows as $row) {
+    // Donors whose group was never recorded are ignored, exactly as the
+    // per-group version did - it only ever asked about the eight.
+    if (array_key_exists($row['blood_group'], $counts)) {
+        $counts[$row['blood_group']] = (int) $row['n'];
+    }
 }
 
 // WhatsApp needs an approved template for donors who have not messaged

@@ -1,6 +1,14 @@
 <?php
 /**
  * AJAX - Report Export
+ *
+ * CSRF is deliberately NOT checked here. This endpoint is reached by a
+ * plain GET navigation (window.location.href), so the browser sends no
+ * token - adding a check would break the download outright. Putting the
+ * token in the query string instead would leak it into browser history,
+ * referrer headers and server logs, which is a worse trade for a
+ * read-only endpoint that the same-origin policy already protects.
+ * It is authenticated: isLoggedIn() is enforced below.
  */
 
 require_once __DIR__ . '/../config.php';

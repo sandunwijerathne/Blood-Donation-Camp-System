@@ -77,6 +77,29 @@ for c in $REQUIRED_COLUMNS; do
 done
 
 echo
+echo "── Schema version ──────────────────────────────────────────"
+# The ledger answers "which migrations does this dump contain?" - the
+# question nobody could answer during either of the bad restores.
+has_ledger=$("$MYSQL_BIN" -u "$ADMIN_USER" -N -B -e     "SELECT COUNT(*) FROM information_schema.tables
+     WHERE table_schema='$SCRATCH' AND table_name='schema_migrations';")
+
+if [ "$has_ledger" = "1" ]; then
+    "$MYSQL_BIN" -u "$ADMIN_USER" -N -B "$SCRATCH" -e         "SELECT CONCAT('  ', filename, '  ', DATE_FORMAT(applied_at,'%Y-%m-%d'))
+         FROM schema_migrations ORDER BY filename;"
+    dump_count=$("$MYSQL_BIN" -u "$ADMIN_USER" -N -B "$SCRATCH" -e "SELECT COUNT(*) FROM schema_migrations;")
+    repo_count=$(ls "$(dirname "$0")/.."/migration-*.sql 2>/dev/null | wc -l | tr -d ' ')
+    note "migrations in dump / in repo" "$dump_count / $repo_count"
+    if [ "$dump_count" -lt "$repo_count" ]; then
+        note "dump is BEHIND the repository" "re-run scripts/migrate.php after restoring"
+        fail=1
+    fi
+else
+    note "schema_migrations table" "ABSENT - dump predates the ledger"
+    echo "     This dump cannot state which migrations it contains. Treat it"
+    echo "     as older than the current code and re-run migrate.php after."
+fi
+
+echo
 echo "── Data ────────────────────────────────────────────────────"
 donors=$("$MYSQL_BIN" -u "$ADMIN_USER" -N -B "$SCRATCH" -e "SELECT COUNT(*) FROM donors;" 2>/dev/null || echo 0)
 admins=$("$MYSQL_BIN" -u "$ADMIN_USER" -N -B "$SCRATCH" -e "SELECT COUNT(*) FROM admins;" 2>/dev/null || echo 0)
