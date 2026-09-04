@@ -40,9 +40,13 @@ $status = trim($_GET['status'] ?? '');
 $where = [];
 $params = [];
 
-if (!empty($bloodGroup)) {
-    $where[] = "blood_group = ?";
-    $params[] = $bloodGroup;
+// Same helper the donor list uses. The export buttons send whatever the
+// page's filter is set to, so if only the list understood the "not
+// recorded" sentinel, choosing it and pressing Export would quietly
+// export every donor instead of the 344 with no blood group.
+$bloodClause = bloodGroupFilterClause($bloodGroup, $params);
+if ($bloodClause !== '') {
+    $where[] = $bloodClause;
 }
 
 if (!empty($status)) {

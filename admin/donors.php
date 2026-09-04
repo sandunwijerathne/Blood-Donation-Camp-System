@@ -40,6 +40,11 @@ require_once __DIR__ . '/../includes/header.php';
             <option value="AB-">AB-</option>
             <option value="O+">O+</option>
             <option value="O-">O-</option>
+            <!-- 344 donors came from the register books with no blood
+                 group recorded. Without this they can only be seen mixed
+                 into "All", which makes the list of people still needing
+                 a group impossible to work through. -->
+            <option value="__none__">Not recorded</option>
         </select>
         <select class="form-select form-select-sm" id="filterStatus" style="width: auto;">
             <option value="">All Status</option>

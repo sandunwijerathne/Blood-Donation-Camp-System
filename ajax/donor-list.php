@@ -45,14 +45,17 @@ $where = [];
 $params = [];
 
 if (!empty($searchValue)) {
-    $where[] = "(donor_name LIKE ? OR mobile LIKE ? OR email LIKE ? OR whatsapp LIKE ?)";
+    // Address is searchable because the imported register-book records
+    // are organised by village - "දෙනියාගොඩ" is what someone actually
+    // types when looking for a donor from there.
+    $where[] = "(donor_name LIKE ? OR mobile LIKE ? OR email LIKE ? OR whatsapp LIKE ? OR address LIKE ?)";
     $searchParam = "%$searchValue%";
-    $params = array_merge($params, [$searchParam, $searchParam, $searchParam, $searchParam]);
+    $params = array_merge($params, array_fill(0, 5, $searchParam));
 }
 
-if (!empty($bloodGroup)) {
-    $where[] = "blood_group = ?";
-    $params[] = $bloodGroup;
+$bloodClause = bloodGroupFilterClause($bloodGroup, $params);
+if ($bloodClause !== '') {
+    $where[] = $bloodClause;
 }
 
 if (!empty($status)) {

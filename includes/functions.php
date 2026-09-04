@@ -654,3 +654,48 @@ function humaniseSeconds(int $seconds): string
 
     return $minutes . ' minute' . ($minutes === 1 ? '' : 's');
 }
+
+// ── Donor filtering ──────────────────────────────────────────
+
+/**
+ * Sentinel for "blood group was never recorded".
+ *
+ * A real group can never be this value, so it cannot collide with one.
+ * It exists because an empty filter value already means "no filter at
+ * all", leaving no way to ask for the donors whose group is blank.
+ */
+const BLOOD_GROUP_NONE = '__none__';
+
+/**
+ * WHERE clause for the blood group filter, or '' for no filtering.
+ *
+ * Shared by the donor list and the donor export because the export
+ * buttons pass whatever the page's filter is set to. If only one of
+ * them understood the sentinel, choosing "Not recorded" and pressing
+ * Export would quietly export every donor instead.
+ *
+ * $params is appended to in step with the returned clause.
+ */
+function bloodGroupFilterClause(string $value, array &$params): string
+{
+    $value = trim($value);
+
+    if ($value === '') {
+        return '';
+    }
+
+    if ($value === BLOOD_GROUP_NONE) {
+        // Imported register-book rows store '' rather than NULL, but
+        // accept both so the filter cannot miss a row.
+        return "(blood_group IS NULL OR blood_group = '')";
+    }
+
+    $valid = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
+    if (!in_array($value, $valid, true)) {
+        return '';
+    }
+
+    $params[] = $value;
+
+    return 'blood_group = ?';
+}
