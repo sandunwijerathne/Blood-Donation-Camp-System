@@ -12,20 +12,20 @@ class ComposerStaticInit04daf6e568950971232d5899e0c58f6e
     );
 
     public static $prefixLengthsPsr4 = array (
-        'Z' =>
+        'Z' => 
         array (
             'ZipStream\\' => 10,
         ),
-        'P' =>
+        'P' => 
         array (
             'Psr\\SimpleCache\\' => 16,
             'PhpOffice\\PhpSpreadsheet\\' => 25,
         ),
-        'M' =>
+        'M' => 
         array (
             'Matrix\\' => 7,
         ),
-        'C' =>
+        'C' => 
         array (
             'Composer\\Pcre\\' => 14,
             'Complex\\' => 8,
@@ -33,36 +33,36 @@ class ComposerStaticInit04daf6e568950971232d5899e0c58f6e
     );
 
     public static $prefixDirsPsr4 = array (
-        'ZipStream\\' =>
+        'ZipStream\\' => 
         array (
             0 => __DIR__ . '/..' . '/maennchen/zipstream-php/src',
         ),
-        'Psr\\SimpleCache\\' =>
+        'Psr\\SimpleCache\\' => 
         array (
             0 => __DIR__ . '/..' . '/psr/simple-cache/src',
         ),
-        'PhpOffice\\PhpSpreadsheet\\' =>
+        'PhpOffice\\PhpSpreadsheet\\' => 
         array (
             0 => __DIR__ . '/..' . '/phpoffice/phpspreadsheet/src/PhpSpreadsheet',
         ),
-        'Matrix\\' =>
+        'Matrix\\' => 
         array (
             0 => __DIR__ . '/..' . '/markbaker/matrix/classes/src',
         ),
-        'Composer\\Pcre\\' =>
+        'Composer\\Pcre\\' => 
         array (
             0 => __DIR__ . '/..' . '/composer/pcre/src',
         ),
-        'Complex\\' =>
+        'Complex\\' => 
         array (
             0 => __DIR__ . '/..' . '/markbaker/complex/classes/src',
         ),
     );
 
     public static $prefixesPsr0 = array (
-        'H' =>
+        'H' => 
         array (
-            'HTMLPurifier' =>
+            'HTMLPurifier' => 
             array (
                 0 => __DIR__ . '/..' . '/ezyang/htmlpurifier/library',
             ),
