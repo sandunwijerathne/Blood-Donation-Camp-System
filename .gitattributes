@@ -5,6 +5,11 @@
 # the backup job on the production server.
 *.sh            text eol=lf
 
+# Batch files must stay CRLF: cmd.exe can mis-parse labels and goto in
+# a .cmd checked out with LF endings.
+*.cmd           text eol=crlf
+*.bat           text eol=crlf
+
 # Everything else the project edits on Windows keeps CRLF locally and is
 # stored as LF in the repository.
 *.php           text

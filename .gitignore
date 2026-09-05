@@ -17,8 +17,11 @@ uploads/
 storage/logs/
 *.log
 
+# Local backup settings (names the database user).
+scripts/backup.env
+
 # ── Database dumps ───────────────────────────────────────────
-# A dump of this database contains 488 people's names, phone numbers
+# A dump of this database contains 800+ people's names, phone numbers
 # and blood groups. Never commit one.
 backups/
 *.sql.gz
