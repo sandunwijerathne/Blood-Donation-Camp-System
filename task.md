@@ -203,21 +203,23 @@ both modes.
       getDB()->query(). All 11 admin pages now render fully with no
       errors - checked by rendering each one.
 
-## Phase 20: OUTSTANDING
-- [ ] **Set your own admin email + password** on Settings > Admin Account.
-      The UI is ready; only you can choose the password.
+## Phase 20: OUTSTANDING (historical - superseded by Phase 31)
+Kept for the record. Current status of each item:
+
+- [x] **Set your own admin email + password** - done 2026-09-04. Account is
+      now pubudu@admin.com; the seeded admin@admin.com no longer exists and
+      the published default password is rejected by the login endpoint.
 - [ ] Create and get approval for the actual WhatsApp templates in
-      WhatsApp Manager (`blood_camp_notification`, `emergency_blood_request`,
-      `general_announcement`), then confirm the names on the Templates page
-- [ ] Saved WhatsApp token is only 32 characters - real Meta tokens start
-      "EAA" and run 200+ chars, so the current value is a placeholder
-- [ ] Decide whether blood-doner-details/ (195 MB of donor photos) belongs
-      in git - currently untracked, and these are personal health records
-- [ ] Pages 55-73 not transcribed; ~150 no-blood-group contacts from
-      pages 1-52 need re-transcribing
-- [ ] No automated tests
-- [ ] SMS (Dialog/Mobitel) not implemented - deliberately deferred,
-      WhatsApp only for now
+      WhatsApp Manager - still outstanding, see Phase 31
+- [ ] Saved WhatsApp token is only 32 characters - still outstanding
+- [x] Decide whether blood-doner-details/ belongs in git - decided: no.
+      A .gitignore now excludes it along with uploads/, backups/ and dumps.
+- [ ] Pages 55-73 / no-blood-group contacts - partly addressed: 335 more
+      donors were imported 2026-09-04, but 344 of the 823 still have no
+      blood group. See Phase 30.
+- [x] No automated tests - a zero-dependency suite now exists, see Phase 32
+- [x] SMS not implemented - Notify.lk is live and sending, see Phase 23.
+      Dialog and Mobitel remain deliberately unimplemented.
 
 ## Phase 21: Camp Budget, Donations and Expenses
 People bring food, soft drinks and water bottles to a camp for the
@@ -275,3 +277,233 @@ can spend.
 - [x] Donors table and the Reports eligible-donor list now show a dash
       for the ~10 donors transcribed with no blood group, instead of an
       empty badge.
+
+## Phase 23: Notify.lk SMS gateway
+Twilio does not serve Sri Lankan numbers economically and cannot carry
+Sinhala without cost. Notify.lk replaces it.
+
+- [x] No client library, deliberately. notifylk/notify-php returns
+      `[null, $statusCode, $httpHeader]` from sendSMSWithHttpInfo(),
+      discarding the response body - and that body is the only place
+      Notify says whether a message was accepted. The whole API is one
+      form-encoded POST, so it is called directly.
+- [x] Success is decided by the DECODED BODY, not the HTTP status.
+      Notify answers 200 with `{"status":"error"}` for a rejected send,
+      so status-code checking alone would log failures as successes.
+- [x] Field errors arrive as `{"errors":[...]}`, not a message string.
+      Reading only message/error replaced the real reason ("The api key
+      field must be 20 characters.") with a generic one.
+- [x] `type=unicode` set only when the message is non-ASCII. Notify
+      defaults to GSM-7, which has no Sinhala - messages arrived as a
+      row of "?". UCS-2 carries 70 characters per segment instead of
+      160, so forcing it on English would roughly double its cost.
+      The check runs on the RENDERED body, so a Sinhala donor name in
+      an English template correctly flips that message too.
+- [x] Length capped with mb_strlen, not strlen: a Sinhala message is
+      multi-byte and byte-counting rejected valid messages at a third
+      of Notify's 320-character limit.
+- [x] Settings: Notify.lk added to the gateway dropdown AND to the
+      server-side whitelist in settings-save.php. Missing the second
+      silently rewrote the gateway back to twilio on every save, so
+      Notify credentials were posted to Twilio and rejected.
+
+## Phase 24: Staff (camp organising committee)
+- [x] migration-staff.sql - `staff` table, plus `message_logs.staff_id`
+      because donor_id has a foreign key into donors and cannot hold a
+      staff id. A log row belongs to one or the other, never both.
+- [x] admin/staff.php and ajax/staff-{save,list,delete}.php
+- [x] Staff are a recipient option on Messages and Emergency, wired for
+      both channels - chunking one sender and not the other would have
+      made the client re-send the whole list on every chunk.
+- [x] Mobile must be 07... A committee member exists to be messaged, so
+      a landline is a guaranteed silent failure the night before a camp.
+      Donors keep the looser rule.
+- [x] Deleting a staff member keeps their message history: the foreign
+      key is ON DELETE SET NULL, so the audit trail survives.
+
+## Phase 25: Sinhala message templates
+- [x] migration-sinhala-templates.sql - Sinhala versions of all three
+      templates, alongside the English ones rather than replacing them.
+- [x] They reuse the same whatsapp_template_name with language `si`,
+      which is Meta's own model: one template name, one approved
+      version per language.
+- [x] Verified through the app's PDO connection, not just the mysql
+      client: valid UTF-8, zero literal "?", placeholders intact as
+      Latin capitals, and rendering with real Sinhala values leaves no
+      unresolved tokens.
+- [x] Cost recorded: the two long Sinhala templates are 3 SMS segments
+      each against 1 for their English equivalents.
+
+## Phase 26: Pre-production audit
+- [x] Full security, database, performance, dependency and reliability
+      audit before first deployment. Scored 40/100 - NOT READY.
+- [x] Findings that were REAL and reproduced live: .git downloadable
+      over HTTP, MySQL root with an empty password, the seeded admin
+      still active, an open redirect via the Host header, no
+      brute-force protection, errors discarded rather than logged,
+      three HIGH CVEs in PhpSpreadsheet, stored XSS in 14 DataTables
+      columns, and no backups of any kind.
+- [x] Findings that were checked and came back CLEAN: no SQL injection
+      in any of 75 queries, CSRF on every state-changing endpoint,
+      auth on every page and endpoint, bcrypt, session regeneration on
+      login, no dangerous functions.
+- [x] One audit finding was WRONG and is corrected here: BUG-07 called
+      ezyang/htmlpurifier a dead dependency to remove. It is a hard
+      require of phpspreadsheet. Removing it would break composer.
+
+## Phase 27: Security hardening, part 1
+- [x] .htaccess blocks dotfiles and dot-directories. The FilesMatch
+      rules match EXTENSIONS, and .git internals have none, so
+      /.git/config returned 200 - enough to reconstruct the repository
+      and its history including deleted donor photographs.
+- [x] Credentials moved to config.local.php (git-ignored);
+      docs/create-db-user.sql holds the GRANT statements for a
+      least-privilege user, with the password left as a placeholder.
+- [x] APP_CANONICAL_HOST pins the hostname. BASE_URL was built from
+      the client-supplied Host header, so a request carrying
+      "Host: evil.example.com" produced redirects and asset URLs
+      pointing there.
+- [x] error_reporting(E_ALL) with display_errors off and log_errors on.
+      The previous error_reporting(0) does not merely hide errors, it
+      stops them being generated, so nothing reached a log either -
+      which is why a missing database column presented as a blank page.
+- [x] session.cookie_secure under HTTPS, and a two-hour idle timeout
+      that finally reads the login_time that was being recorded and
+      never used.
+- [x] composer.phar untracked and denied; uploads moved out of the web
+      root with random filenames and a 5 MB cap.
+- [x] **Mistake made and caught:** `php_flag engine off` was added at
+      the app root intending it for uploads only. It disabled PHP
+      across the whole application and Apache began serving .php files
+      as PLAIN TEXT - a worse disclosure than the one being fixed.
+      Caught by a browser check; curl's 200 responses had not revealed
+      it. A comment in .htaccess now says why it must never go there.
+
+## Phase 28: Security hardening, part 2
+- [x] 14 DataTables columns across six pages now use
+      `$.fn.dataTable.render.text()`. Reproduced in a browser first:
+      the unescaped column genuinely executed an onerror payload.
+- [x] login_attempts table and throttling - 5 failures per email and
+      20 per IP in 15 minutes. Runs BEFORE the password check, and the
+      lockout message is identical whether or not the account exists so
+      it cannot be used to enumerate accounts. X-Forwarded-For is
+      deliberately not trusted: it is attacker-controlled and would let
+      anyone reset their own limit.
+- [x] Bulk sending chunked with a campaign id. One outbound call per
+      recipient could not finish inside max_execution_time for 488
+      donors: the request died part-way, some donors received the
+      message, and re-running messaged everyone again. A recipient
+      already logged Sent under that campaign is skipped; a Failed one
+      is retried.
+- [x] dataTablePaging() - DataTables sends length=-1 for "All", and
+      "LIMIT -1" is a SQL syntax error. Two endpoints clamped it and
+      five did not, which is what keeping the rule in seven places
+      produces.
+- [x] Subresource Integrity on all 15 CDN assets; sweetalert2 pinned
+      from a floating @11 to 11.26.25. Google Fonts deliberately
+      excluded - its CSS varies by user agent, so a pinned hash would
+      break the page.
+
+## Phase 29: Maintainability
+- [x] schema_migrations ledger and scripts/migrate.php with
+      status / baseline / migrate / rehash. Exit 0 clean, 1 pending,
+      2 an applied migration has been EDITED since it ran - the last
+      being otherwise completely invisible, and the situation that
+      rolled this database backwards twice.
+- [x] Checksums normalise line endings. Hashing raw bytes made every
+      migration report itself as edited straight after being committed,
+      because git stores LF and checks out CRLF on Windows. A checker
+      that cries wolf is one nobody reads.
+- [x] includes/messaging.php - one implementation per provider. The
+      Twilio routine existed twice byte-for-byte, once for real sends
+      and once for the Settings test, so a passing test guaranteed
+      nothing about real sends.
+- [x] emergency.php: eight COUNT queries in a loop replaced by one
+      GROUP BY, verified to produce identical figures.
+- [x] CSRF applied to the eight list endpoints. The four EXPORT
+      endpoints are deliberately left out and each says why: they are
+      plain GET navigations that send no token, and putting one in the
+      query string would leak it into history, referrers and logs.
+- [x] docs/recovery.md - password recovery (there is deliberately no
+      self-service reset), clearing a lockout, restoring safely, and
+      what git does not hold.
+
+## Phase 30: Donor import and backups
+- [x] 335 donors imported from an external dump, taking the roll from
+      488 to 823. The dump was NOT restored: it contained only 9 tables
+      and would have rolled the schema back past Phases 24-29 for a
+      third time. Donors were extracted into a throwaway database and
+      inserted through normalizeMobile().
+- [x] Verified after import: 823 distinct mobiles for 823 rows, zero
+      duplicates, zero mangled names, 321 Sinhala names read back
+      intact through the application's own connection.
+- [x] "Not recorded" blood group filter. 344 of 823 donors have no
+      blood group - the largest single category - and the dropdown
+      offered no way to list them. The clause is shared with the export,
+      because the export buttons send whatever the page filter is set
+      to and only one of them understanding it would have quietly
+      exported all 823.
+- [x] Addresses are searchable. The register books are organised by
+      village, so a village name is what somebody types; it returned
+      nothing and now returns 60 matches.
+- [x] Nightly backup scheduled 02:15 via Task Scheduler, verified by
+      triggering it and restoring the result into a throwaway database.
+- [x] PhpSpreadsheet upgraded to 1.30.6, clearing three HIGH CVEs.
+      The 512-byte OLE stub that drove OLERead.php to a 264 MB
+      allocation and a fatal now throws cleanly at 6 MB. The Phase 27
+      mitigations were KEPT on top rather than reverted.
+
+## Phase 31: OUTSTANDING
+
+Blocks production:
+- [ ] **Create the least-privilege database user.** config.local.php
+      does not exist and no bdms_* user exists, so the application
+      still connects as MySQL root with an empty password. Everything
+      else sits on top of this. docs/create-db-user.sql is ready; only
+      you can choose the password.
+- [ ] **Set APP_CANONICAL_HOST** in the same file once the production
+      hostname is known. Until then the open-redirect fix is inert.
+- [ ] **Confirm .htaccess is honoured on the production host.** Every
+      file protection depends on it. On nginx, or Apache with
+      AllowOverride None, none of it applies and config.php becomes
+      readable. Test: requesting /.git/HEAD must not return 200.
+
+Blocks real messaging:
+- [ ] Sender ID is still NotifyDEMO. Needs an approved name of at most
+      11 characters - the organisation's full name is 27 and no carrier
+      will deliver it.
+- [ ] Three WhatsApp templates need approving in WhatsApp Manager, in
+      both en and si.
+- [ ] WhatsApp number registration still fails. The test number under
+      "Step 1. Try it out" is the low-risk way back in.
+- [ ] The saved WhatsApp token is 32 characters - a placeholder. Real
+      Meta tokens start "EAA" and run 200+.
+
+Operational:
+- [ ] Move backups off this disk. Archives currently sit on the same
+      drive as the database they protect.
+- [ ] Point the backup at bdms_backup once it exists, with the password
+      in a MySQL option file - never an environment variable, where the
+      process list exposes it.
+- [ ] Cost-check before the first camp blast: 823 recipients, and
+      Sinhala names flip even English templates to three segments.
+
+Data:
+- [ ] 344 donors have no blood group. Use the new filter: search a
+      village, set "Not recorded", work the list.
+- [ ] Two landline records (ids 411, 416) will fail on every send.
+
+## Phase 32: Automated tests
+- [x] tests/run.php - a zero-dependency runner. PHPUnit was considered
+      and rejected: vendor/ is tracked in this repository, so adding it
+      would commit thousands of files for a suite this size, and the
+      project uses no framework anywhere else.
+- [x] Covers the pure logic behind the bugs that actually happened:
+      mobile normalisation, DataTables paging, the blood group filter,
+      campaign ids, placeholder rendering, SMS segment and encoding
+      rules, output escaping, lockout wording and gateway setup hints.
+      Migration checksums are NOT covered: scripts/migrate.php is a
+      script that would execute on require, so it cannot be loaded
+      into the suite without refactoring it first.
+- [x] No database and no network, so it runs anywhere and cannot
+      damage data. Run with: php tests/run.php
