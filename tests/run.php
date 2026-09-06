@@ -71,15 +71,15 @@ function is_true(string $label, $actual): void
 // ─────────────────────────────────────────────────────────────
 group('Mobile normalisation  (donors were stored twice under two formats)');
 
-is_same('spaces stripped',            normalizeMobile('077 821 1176'), '0778211176');
-is_same('+94 converted to leading 0', normalizeMobile('+94778211176'), '0778211176');
-is_same('94 prefix converted',        normalizeMobile('94778211176'),  '0778211176');
-is_same('9 digits gain the 0',        normalizeMobile('778211176'),    '0778211176');
-is_same('dashes stripped',            normalizeMobile('077-821-1176'), '0778211176');
-is_same('already canonical',          normalizeMobile('0778211176'),   '0778211176');
+is_same('spaces stripped',            normalizeMobile('070 000 0000'), '0700000000');
+is_same('+94 converted to leading 0', normalizeMobile('+94700000000'), '0700000000');
+is_same('94 prefix converted',        normalizeMobile('94700000000'),  '0700000000');
+is_same('9 digits gain the 0',        normalizeMobile('700000000'),    '0700000000');
+is_same('dashes stripped',            normalizeMobile('070-000-0000'), '0700000000');
+is_same('already canonical',          normalizeMobile('0700000000'),   '0700000000');
 is_same('all four spellings agree',
     count(array_unique(array_map('normalizeMobile',
-        ['077 821 1176', '+94778211176', '94778211176', '0778211176']))), 1);
+        ['070 000 0000', '+94700000000', '94700000000', '0700000000']))), 1);
 is_same('too short rejected',         normalizeMobile('12345'),        '');
 is_same('empty rejected',             normalizeMobile(''),             '');
 is_same('letters rejected',           normalizeMobile('not a number'), '');

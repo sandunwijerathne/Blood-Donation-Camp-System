@@ -21,7 +21,7 @@ $name = trim($_POST['name'] ?? '');
 $status = trim($_POST['status'] ?? 'Active');
 
 // Normalise before anything else. donor-save.php once skipped this and a
-// number typed as "077 821 1176" stored the spaces, so the same person got
+// number typed as "070 000 0000" stored the spaces, so the same person got
 // in twice under two spellings. The UNIQUE key only helps if every write
 // arrives in the same shape.
 $mobile = normalizeMobile((string) ($_POST['mobile'] ?? ''));

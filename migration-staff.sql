@@ -11,7 +11,7 @@
 -- `mobile` is UNIQUE for the same reason it is on donors: the T.P.
 -- number identifies a person. Every write goes through normalizeMobile()
 -- first, so the numbers are all stored in one canonical 07XXXXXXXX form
--- and the unique key actually bites - "077 821 1176" and "+94778211176"
+-- and the unique key actually bites - "070 000 0000" and "+94700000000"
 -- cannot both get in as separate committee members.
 -- ============================================================
 

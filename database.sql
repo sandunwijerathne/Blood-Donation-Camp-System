@@ -143,7 +143,7 @@ CREATE TABLE IF NOT EXISTS `camp_expenses` (
 -- People who run a camp rather than give blood, so only a name and a
 -- mobile number are kept. `mobile` is UNIQUE and every write goes
 -- through normalizeMobile() first, so one person cannot get in twice
--- as "077 821 1176" and "+94778211176".
+-- as "070 000 0000" and "+94700000000".
 --
 -- Defined before message_logs because that table has a foreign key
 -- pointing at this one.

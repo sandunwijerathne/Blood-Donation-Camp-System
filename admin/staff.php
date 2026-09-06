@@ -78,7 +78,7 @@ require_once __DIR__ . '/../includes/header.php';
                             <input type="text" class="form-control" name="mobile" id="staffMobile" required
                                    placeholder="07XXXXXXXX">
                             <div class="form-text">
-                                Any format is accepted - 077 821 1176 and +94778211176 are stored the same way.
+                                Any format is accepted - 070 000 0000 and +94700000000 are stored the same way.
                             </div>
                             <div class="invalid-feedback"></div>
                         </div>

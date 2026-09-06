@@ -182,7 +182,7 @@ function formatTime(?string $time, string $format = 'h:i A'): string
  * The T.P. number is the unique identifier for a person, so every
  * entry point (donor form, Excel import, camp register) must store
  * it the same way or duplicates slip through. Handles the shapes
- * that appear in the paper register: "077 821 1176", "071-6340385",
+ * that appear in the paper register: "070 000 0000", "071-6340385",
  * "+94752698599", "94752698599".
  *
  * Returns '' when the input cannot be read as a usable number.

@@ -43,8 +43,8 @@ if (empty($donorName)) {
 }
 
 // The T.P. number is this system's unique identifier for a person, so it
-// must be stored in one canonical shape. Without this, "077 821 1176"
-// entered here would never match the "0778211176" the camp register
+// must be stored in one canonical shape. Without this, "070 000 0000"
+// entered here would never match the "0700000000" the camp register
 // looks up, and the same donor would be created twice.
 if (empty($mobile)) {
     $errors['mobile'] = 'Mobile number is required.';

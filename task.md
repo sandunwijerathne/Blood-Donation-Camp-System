@@ -161,8 +161,8 @@ both modes.
 
 ## Phase 18: Bug Fixes (round 2)
 - [x] **donor-save.php did not normalise the T.P. number.** A donor added
-      by hand as "077 821 1176" was stored with the spaces, so the camp
-      register's "0778211176" lookup missed and created a second copy of
+      by hand as "070 000 0000" was stored with the spaces, so the camp
+      register's "0700000000" lookup missed and created a second copy of
       the same person. The Add/Edit form now normalises mobile and
       WhatsApp, and duplicate detection catches the same person entered
       as 077..., +94... or with spaces.
@@ -207,7 +207,7 @@ both modes.
 Kept for the record. Current status of each item:
 
 - [x] **Set your own admin email + password** - done 2026-09-04. Account is
-      now pubudu@admin.com; the seeded admin@admin.com no longer exists and
+      no longer the seeded admin@admin.com, which no longer exists, and
       the published default password is rejected by the login endpoint.
 - [ ] Create and get approval for the actual WhatsApp templates in
       WhatsApp Manager - still outstanding, see Phase 31
